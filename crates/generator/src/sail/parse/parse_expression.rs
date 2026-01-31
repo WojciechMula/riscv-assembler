@@ -2,7 +2,9 @@ use super::parse_array;
 use super::parse_binary_expr;
 use super::parse_invocation;
 use super::parse_list;
+use super::parse_struct;
 use crate::err;
+use crate::model::BinaryConcatenation;
 use crate::model::FunctionInvocation;
 use crate::model::Type;
 use crate::model::Value;
@@ -11,7 +13,34 @@ use crate::sail::Parser;
 use crate::sail::Token;
 
 pub fn parse_expression(p: &mut Parser) -> crate::Result<Value> {
-    let expr = parse_expression_aux(p)?;
+    let mut expr = parse_expression_aux(p)?;
+
+    if matches!(p.peek(), Token::BinXor) {
+        let mut exprs = vec![expr];
+        while p.try_consume(Token::BinXor) {
+            let expr = parse_expression_aux(p)?;
+            exprs.push(expr);
+        }
+
+        expr = Value::StringConcatenation(exprs);
+    }
+
+    if matches!(p.peek(), Token::BinConcat) {
+        let mut exprs = vec![expr];
+        while p.try_consume(Token::BinConcat) {
+            let expr = parse_expression_aux(p)?;
+            exprs.push(expr);
+        }
+
+        let bc = BinaryConcatenation(exprs);
+        expr = Value::BinaryConcatenation(bc);
+    }
+
+    Ok(expr)
+}
+
+fn parse_expression_aux(p: &mut Parser) -> crate::Result<Value> {
+    let expr = parse_single_expression(p)?;
     if p.try_consume(Token::Colon) {
         let typ = Type::parse(p)?;
 
@@ -21,7 +50,7 @@ pub fn parse_expression(p: &mut Parser) -> crate::Result<Value> {
     }
 }
 
-pub fn parse_expression_aux(p: &mut Parser) -> crate::Result<Value> {
+fn parse_single_expression(p: &mut Parser) -> crate::Result<Value> {
     let token = p.peek();
     match token {
         Token::None => err!("unexpected end of input"),
@@ -37,6 +66,7 @@ pub fn parse_expression_aux(p: &mut Parser) -> crate::Result<Value> {
         Token::String(s) => {
             let val = Value::String(s.clone());
             p.consume();
+
             Ok(val)
         }
         Token::True => {
@@ -52,11 +82,36 @@ pub fn parse_expression_aux(p: &mut Parser) -> crate::Result<Value> {
             p.consume();
             Ok(val)
         }
+        Token::Struct => {
+            p.consume();
+            let val = parse_struct(p)?;
+            Ok(Value::Struct(val))
+        }
         Token::Identifier(ident) => {
             let ident = ident.to_owned();
             if matches!(p.lookahead(1), Token::OpenParen) {
                 let call = parse_invocation(p)?;
                 Ok(call)
+            } else if matches!(p.lookahead(1), Token::OpenSquareParen) {
+                // ident[hi .. lo]
+                let ident = ident.to_owned();
+                p.consume();
+                p.expect(Token::OpenSquareParen)?;
+                let hi = p.number()?;
+                p.expect(Token::RangeSeparator)?;
+                let lo = p.number()?;
+                p.expect(Token::CloseSquareParen)?;
+
+                let fun = FunctionInvocation {
+                    name: "asm::bitvector_subvector".to_string(),
+                    args: vec![
+                        Value::Symbol(ident),
+                        Value::Integer(hi.try_into()?),
+                        Value::Integer(lo.try_into()?),
+                    ],
+                };
+
+                Ok(Value::FunctionInvocation(fun))
             } else if matches!(p.lookahead(1), Token::Unit) {
                 // matches "function()" -> [ident, unit]
                 p.consume();

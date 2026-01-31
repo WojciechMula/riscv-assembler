@@ -4,8 +4,9 @@ mapping pseudoinstructions = {
     /*!
         ADDI rd, rs1, 0 is used to implement the MV rd, rs1 assembler pseudoinstruction
     */
-    ITYPE((0 : bitvector(12)), rs1, rd, ADDI) <-> "mv" ^ spc(()) ^ reg_name(rd) ^ sep(()) ^ reg_name(rs1),
+    ITYPE((0 : bitvector(12)), rs1, rd, ADDI) <-> "mv" ^ spc(()) ^ reg_name(rd) ^ sep(()) ^ reg_name(rs1)
 
+/*! XXX
     /*!
          Note, SLTIU rd, rs1, 1 sets rd to 1 if rs1 equals zero, otherwise
          sets rd to 0 (assembler pseudoinstruction SEQZ rd, rs)
@@ -69,4 +70,5 @@ is not required: CSRS/CSRC csr, rs1; CSRSI/CSRCI csr, uimm.
     BTYPE(imm, zreg, rs1, BNE) <-> "bnez" ^ spc(()) ^ reg_name(rs1) ^ sep(()) ^ resolve_label(imm, 13),
     BTYPE(imm, zreg, rs1, BGE) <-> "bgez" ^ spc(()) ^ reg_name(rs1) ^ sep(()) ^ resolve_label(imm, 13),
     BTYPE(imm, zreg, rs1, BLT) <-> "bltz" ^ spc(()) ^ reg_name(rs1) ^ sep(()) ^ resolve_label(imm, 13)
+*/
 }

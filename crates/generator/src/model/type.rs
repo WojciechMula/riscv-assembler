@@ -1,6 +1,7 @@
 use super::StructSignature;
 use super::Value;
 use crate::err;
+use crate::model::Struct;
 use crate::sail::Parser;
 use crate::sail::Token;
 use crate::sail::parse::parse_binary_expr;
@@ -35,7 +36,7 @@ impl Type {
         matches!(self, Self::String)
     }
 
-    pub fn parse_value(&self, p: &mut Parser) -> crate::Result<Value> {
+    pub fn parse_value2(&self, p: &mut Parser) -> crate::Result<Value> {
         match self {
             Self::BitVector(_) => parse_binary_expr(p),
             Self::String => parse_string_expr(p),
@@ -96,7 +97,10 @@ impl Type {
                 }
                 p.expect(Token::CloseCurlyParen)?;
 
-                Ok(Value::Struct(struct_typ.name.clone(), values))
+                Ok(Value::Struct(Struct {
+                    typename: struct_typ.name.clone(),
+                    values,
+                }))
             }
             _ => todo!("not implemented for {self:?}"),
         }

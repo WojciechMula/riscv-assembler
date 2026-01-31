@@ -1,10 +1,8 @@
 use super::parse_expression;
-use super::parse_invocation;
 use crate::err;
 use crate::model::Mapping;
 use crate::model::MappingSignature;
 use crate::model::Pair;
-use crate::model::Type;
 use crate::model::Value;
 use crate::sail::Parser;
 use crate::sail::Token;
@@ -28,27 +26,7 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
             Token::Bidrectional
         };
 
-        let lhs = match sig.lhs {
-            Type::BitVector(..)
-            | Type::Enum(..)
-            | Type::Set(..)
-            | Type::Struct(..)
-            | Type::Boolean
-            | Type::String
-            | Type::Tuple(..) => sig.lhs.parse_value(p)?,
-            Type::Ident(ref ident) => match ident.as_str() {
-                "instruction" => parse_invocation(p)?,
-                "regidx" => return Ok(result),
-                _ => {
-                    return err!(
-                        "mapping `{}`: unsupported type `{:?}`",
-                        result.name,
-                        sig.lhs
-                    );
-                }
-            },
-            _ => return err!("unsupported type `{:?}`", sig.lhs),
-        };
+        let lhs = parse_expression(p)?;
 
         let mut lhs_cond = Value::Unit;
         if p.try_consume(Token::If) {
@@ -56,20 +34,8 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
         }
 
         p.expect(separator)?;
-        let rhs = match sig.rhs {
-            Type::BitVector(..)
-            | Type::Enum(..)
-            | Type::Set(..)
-            | Type::Struct(..)
-            | Type::Boolean
-            | Type::String
-            | Type::Tuple(..) => sig.rhs.parse_value(p)?,
-            Type::Ident(ref ident) => match ident.as_str() {
-                "instruction" => parse_invocation(p)?,
-                _ => return err!("unsupported type `{:?}`", sig.rhs),
-            },
-            _ => return err!("unsupported type `{:?}`", sig.rhs),
-        };
+
+        let rhs = parse_expression(p)?;
 
         let mut rhs_cond = Value::Unit;
         if p.try_consume(Token::If) {

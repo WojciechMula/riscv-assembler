@@ -1,37 +1,28 @@
-use crate::model::Type;
 use crate::model::Struct;
-use crate::err;
 use crate::sail::Parser;
 use crate::sail::Token;
+use crate::sail::parse::parse_expression;
 use std::collections::BTreeMap;
 
-    pub fn parse_struct(p: &mut Parser) -> crate::Result<Struct> {
-        let mut result = Struct {
-            name: p.identifier()?,
-            fields: BTreeMap::new(),
-        };
+pub fn parse_struct(p: &mut Parser) -> crate::Result<Struct> {
+    let mut result = Struct {
+        typename: p.identifier()?,
+        values: BTreeMap::new(),
+    };
 
+    p.expect(Token::OpenCurlyParen)?;
+    loop {
+        let name = p.identifier()?;
         p.expect(Token::Equals)?;
-        p.expect(Token::OpenCurlyParen)?;
-        loop {
-            let name = p.identifier()?;
-            p.expect(Token::Colon)?;
-            let typ = Type::parse(p)?;
+        let value = parse_expression(p)?;
 
-            result.fields.insert(name, typ);
+        result.values.insert(name, value);
 
-            let token = p.peek();
-            match token {
-                Token::Comma => {
-                    p.consume();
-                }
-                Token::CloseCurlyParen => {
-                    p.consume();
-                    break;
-                }
-                _ => return err!("parsing struct: unexpected token `{token:?}`"),
-            }
+        if !p.try_consume(Token::Comma) {
+            break;
         }
-
-        Ok(result)
     }
+    p.expect(Token::CloseCurlyParen)?;
+
+    Ok(result)
+}

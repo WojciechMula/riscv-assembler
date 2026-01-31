@@ -245,10 +245,10 @@ impl CodeGenerator {
                     Value::Integer(value) => {
                         w!(f, "let {name} = {value};");
                     }
-                    Value::Struct(typename, values) => {
-                        w!(f, "let {name} = {typename}{{");
-                        for (fieldname, value) in values {
-                            w!(f, "{fieldname}: {},", rust_expression(value));
+                    Value::Struct(structure) => {
+                        w!(f, "let {name} = {}{{", structure.typename);
+                        for (fieldname, value) in &structure.values {
+                            w!(f, "{fieldname}: {},", rust_expression(&value));
                         }
                         w!(f, "}};");
                     }

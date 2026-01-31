@@ -1,5 +1,6 @@
 use crate::err;
 use crate::model::BitVector;
+use crate::model::Struct;
 use crate::model::Type;
 use crate::model::Value;
 
@@ -29,13 +30,13 @@ pub fn rust_expression(v: &Value) -> String {
             format!("{}::{}", el.typename, el.label)
         }
         Value::Symbol(s) => s.clone(),
-        Value::Struct(name, fields) => {
+        Value::Struct(Struct { typename, values }) => {
             let mut f = String::new();
-            for (key, val) in fields {
+            for (key, val) in values {
                 f += &format!("{key}: {},", rust_expression(val));
             }
 
-            format!("{}{{{f}}}", name)
+            format!("{typename}{{{f}}}")
         }
         Value::FunctionInvocation(fun) => {
             let mut f = format!("{}(", fun.name);
@@ -64,13 +65,13 @@ pub fn rust_constructor(v: &Value) -> String {
             format!("{}::{}", el.typename, el.label)
         }
         Value::Symbol(s) => s.clone(),
-        Value::Struct(name, fields) => {
+        Value::Struct(Struct { typename, values }) => {
             let mut fragment = String::new();
-            for (key, val) in fields {
+            for (key, val) in values {
                 fragment += &format!("{key}: {},", rust_expression(val));
             }
 
-            format!("{}{{{fragment}}}", name)
+            format!("{typename}{{{fragment}}}")
         }
         _ => panic!("unsupported `{v:?}`"),
     }

@@ -3,8 +3,8 @@ use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
 use crate::model::EnumLabel;
 use crate::model::FunctionInvocation;
+use crate::model::Struct;
 use crate::model::Type;
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -21,7 +21,7 @@ pub enum Value {
     BinaryConcatenation(BinaryConcatenation),
     FunctionInvocation(FunctionInvocation),
     Tuple(Vec<Value>),
-    Struct(String, BTreeMap<String, Value>),
+    Struct(Struct),
 }
 
 impl Value {

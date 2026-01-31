@@ -3,6 +3,7 @@ use super::Value;
 use crate::err;
 use crate::model::BinaryConcatenation;
 use crate::model::FunctionInvocation;
+use crate::model::Struct;
 use crate::sail::Token;
 use std::collections::BTreeMap;
 
@@ -72,15 +73,18 @@ pub fn rewrite(value: &Value, callback: &dyn Fn(&Value) -> Option<Value>) -> Val
 
             callback(&newval).unwrap_or(newval)
         }
-        Value::Struct(typename, fields) => {
-            let mut newfields = BTreeMap::<String, Value>::new();
+        Value::Struct(Struct { typename, values }) => {
+            let mut newvalues = BTreeMap::<String, Value>::new();
 
-            for (name, val) in fields {
+            for (name, val) in values {
                 let new = rewrite(val, callback);
-                newfields.insert(name.clone(), new);
+                newvalues.insert(name.clone(), new);
             }
 
-            let newval = Value::Struct(typename.clone(), newfields);
+            let newval = Value::Struct(Struct {
+                typename: typename.clone(),
+                values: newvalues,
+            });
 
             callback(&newval).unwrap_or(newval)
         }

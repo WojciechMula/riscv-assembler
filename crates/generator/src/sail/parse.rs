@@ -6,6 +6,7 @@ mod parse_invocation;
 mod parse_list;
 mod parse_mapping;
 mod parse_string_expr;
+mod parse_struct;
 mod parse_type;
 mod parse_union;
 
@@ -17,5 +18,6 @@ pub use parse_invocation::parse_invocation;
 pub use parse_list::parse_list;
 pub use parse_mapping::parse_mapping;
 pub use parse_string_expr::parse_string_expr;
+pub use parse_struct::parse_struct;
 pub use parse_type::parse_type;
 pub use parse_union::parse_union;
