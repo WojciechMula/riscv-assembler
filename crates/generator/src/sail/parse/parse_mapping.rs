@@ -20,6 +20,14 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
     p.expect(Token::OpenCurlyParen)?;
 
     loop {
+        let separator = if matches!(p.peek(), Token::Forwards | Token::Backwards) {
+            p.consume();
+
+            Token::ForwardArrow
+        } else {
+            Token::Bidrectional
+        };
+
         let lhs = match sig.lhs {
             Type::BitVector(..)
             | Type::Enum(..)
@@ -47,7 +55,7 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
             lhs_cond = parse_expression(p)?;
         }
 
-        p.expect(Token::Bidrectional)?;
+        p.expect(separator)?;
         let rhs = match sig.rhs {
             Type::BitVector(..)
             | Type::Enum(..)

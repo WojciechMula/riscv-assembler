@@ -34,6 +34,11 @@ pub fn parse_expression_aux(p: &mut Parser) -> crate::Result<Value> {
             p.consume();
             Ok(val)
         }
+        Token::String(s) => {
+            let val = Value::String(s.clone());
+            p.consume();
+            Ok(val)
+        }
         Token::True => {
             p.consume();
             Ok(Value::Boolean(true))

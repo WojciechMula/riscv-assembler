@@ -70,7 +70,7 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     info!("Collecting instruction mnemonics");
     let mut expanded = Vec::<Instruction>::new();
     for mapping in &map_string {
-        let tmp = expand_mnemonics::expand_mnemonics(mapping, &sail)?;
+        let tmp = expand_mnemonics::expand_mnemonics(&types, mapping, &sail)?;
         expanded.extend(tmp);
     }
 

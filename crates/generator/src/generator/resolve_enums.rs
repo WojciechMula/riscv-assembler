@@ -35,6 +35,42 @@ pub struct ResolvedEnumItem {
     pub string: String,
 }
 
+impl ResolvedTypes {
+    pub fn resolve_idents(&self, typ: &Type, sail: &Sail) -> Type {
+        match typ {
+            Type::Enum(_) | Type::String | Type::Set(..) | Type::Boolean | Type::BitVector(..) => {
+                typ.clone()
+            }
+            Type::Ident(ident) => {
+                if self.enums.contains_key(ident) {
+                    Type::Enum(ident.clone())
+                } else if sail.what_is(ident) == IdentifierKind::Enum {
+                    Type::Enum(ident.clone())
+                } else {
+                    typ.clone()
+                }
+            }
+            Type::Tuple(types) => {
+                let mut new = Vec::<Type>::with_capacity(types.len());
+                for typ in types {
+                    new.push(self.resolve_idents(typ, sail));
+                }
+
+                Type::Tuple(new)
+            }
+            Type::Struct(struct_type) => {
+                let mut struct_type = struct_type.clone();
+                for typ in struct_type.fields.values_mut() {
+                    *typ = self.resolve_idents(typ, sail);
+                }
+
+                Type::Struct(struct_type)
+            }
+            _ => todo!("{typ:?}"),
+        }
+    }
+}
+
 pub fn resolve_enums(
     types: &mut ResolvedTypes,
     instructions: &Union,

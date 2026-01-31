@@ -30,6 +30,12 @@ pub enum Token {
     #[token("operator")]
     Operator,
 
+    #[token("forwards")]
+    Forwards,
+
+    #[token("backwards")]
+    Backwards,
+
     #[token("if", priority = 10)]
     If,
 
@@ -129,7 +135,7 @@ pub enum Token {
 
     #[token("->")]
     #[token("=>")]
-    Forward,
+    ForwardArrow,
 
     #[token("<->")]
     Bidrectional,

@@ -1,10 +1,12 @@
 use crate::err;
+use crate::generator::ResolvedTypes;
 use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
 use crate::model::EnumLabel;
 use crate::model::FunctionInvocation;
 use crate::model::Instruction;
 use crate::model::Mapping;
+use crate::model::MappingSignature;
 use crate::model::Pair;
 use crate::model::StringConstructor;
 use crate::model::Type;
@@ -45,7 +47,11 @@ use std::iter::zip;
             CSRReg(csr, rs1, rd, CSRRC) <-> "csrrc" ^ spc(()) ^ reg_name(rd) ^ sep(()) ^ [...]
             ...
 */
-pub fn expand_mnemonics(assembly: &Mapping, sail: &Sail) -> crate::Result<Vec<Instruction>> {
+pub fn expand_mnemonics(
+    types: &ResolvedTypes,
+    assembly: &Mapping,
+    sail: &Sail,
+) -> crate::Result<Vec<Instruction>> {
     let mut result = Vec::<Instruction>::with_capacity(assembly.pairs.len());
 
     for Pair { lhs, rhs, cond } in &assembly.pairs {
@@ -54,7 +60,7 @@ pub fn expand_mnemonics(assembly: &Mapping, sail: &Sail) -> crate::Result<Vec<In
 
         if let Value::StringConcatenation(args) = rhs {
             let (mnemonic, arguments) = split_at_function(args, "spc");
-            let expanded = expand_functions(&mnemonic, sail)?;
+            let expanded = expand_functions(types, &mnemonic, sail)?;
             for item in expanded {
                 let lhs = rewrite(lhs, &|val: &Value| -> Option<Value> {
                     if let Value::Symbol(symbol) = &val {
@@ -117,14 +123,34 @@ fn split_at_function(args: &[Value], fun: &str) -> (Vec<Value>, Vec<Value>) {
     }
 }
 
-fn expand_functions(mnemonic: &[Value], sail: &Sail) -> crate::Result<Vec<Expanded>> {
+fn expand_functions(
+    types: &ResolvedTypes,
+    mnemonic: &[Value],
+    sail: &Sail,
+) -> crate::Result<Vec<Expanded>> {
     let mut result = Vec::<Expanded>::new();
 
     let mut mappings = Vec::<Option<Mapping>>::new();
     let mut n = 1;
     for value in mnemonic {
         if let Ok(fun) = value.as_fn_call() {
-            let mapping = sail.mapping(&fun.name)?;
+            // XXX: There's no support for structs referring other user-defined types
+            //      It as a mistake mixing parsing and resolving types in `parse_mapping`.
+            let xxx_hack = true;
+            let mapping = if xxx_hack {
+                let sig = sail.mapping_signature(&fun.name)?;
+                let new_lhs = types.resolve_idents(&sig.lhs, sail);
+                let new_rhs = types.resolve_idents(&sig.rhs, sail);
+                let new_sig = MappingSignature {
+                    lhs: new_lhs,
+                    rhs: new_rhs,
+                };
+
+                sail.mapping_with_known_signature(&fun.name, Some(new_sig))?
+            } else {
+                sail.mapping(&fun.name)?
+            };
+
             if fun.args.len() != 1 {
                 return err!(
                     "function `{}` is expected to take exactly one argument",

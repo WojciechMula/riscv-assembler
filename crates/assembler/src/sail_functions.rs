@@ -470,6 +470,6 @@ fn vtype_assembly_aux(p: &mut Parser) -> crate::Result<(VTypeField, u32)> {
     }
 }
 
-fn optional_signed_12(p: &mut Parser) -> crate::Result<BitVector::<12>> {
+fn optional_signed_12(p: &mut Parser) -> crate::Result<BitVector<12>> {
     todo!();
 }

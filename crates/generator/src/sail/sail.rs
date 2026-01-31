@@ -132,19 +132,36 @@ impl Sail {
     }
 
     pub fn mapping(&self, name: &str) -> crate::Result<Mapping> {
-        self.mapping_aux(name, ExpandMapping::BitVector)
+        self.mapping_aux(name, ExpandMapping::BitVector, None)
+    }
+
+    pub fn mapping_with_known_signature(
+        &self,
+        name: &str,
+        custom_signature: Option<MappingSignature>,
+    ) -> crate::Result<Mapping> {
+        self.mapping_aux(name, ExpandMapping::BitVector, custom_signature)
     }
 
     pub fn mapping_raw(&self, name: &str) -> crate::Result<Mapping> {
-        self.mapping_aux(name, ExpandMapping::None)
+        self.mapping_aux(name, ExpandMapping::None, None)
     }
 
-    fn mapping_aux(&self, name: &str, exp: ExpandMapping) -> crate::Result<Mapping> {
+    fn mapping_aux(
+        &self,
+        name: &str,
+        exp: ExpandMapping,
+        mut custom_signature: Option<MappingSignature>,
+    ) -> crate::Result<Mapping> {
         let Some(offset) = self.mappings.get(name) else {
             return err!("mapping `{name}` not found");
         };
 
-        let sig = self.mapping_signature(name)?;
+        let sig = if custom_signature.is_some() {
+            custom_signature.take().unwrap()
+        } else {
+            self.mapping_signature(name)?
+        };
 
         let mut p = self.parser(*offset);
 
@@ -225,7 +242,7 @@ impl Sail {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IdentifierKind {
     Mapping,
     Enum,

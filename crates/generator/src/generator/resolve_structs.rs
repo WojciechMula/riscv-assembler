@@ -43,5 +43,15 @@ pub fn resolve_structs(
         }
     }
 
+    for struct_type in types.structs.values_mut() {
+        for field_type in struct_type.fields.values_mut() {
+            if let Type::Ident(symbol) = field_type {
+                if sail.what_is(symbol) == IdentifierKind::Enum {
+                    *field_type = Type::Enum(symbol.to_string());
+                }
+            }
+        }
+    }
+
     Ok(())
 }
