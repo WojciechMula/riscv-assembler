@@ -49,6 +49,9 @@ pub enum Token {
     #[token(".")]
     Dot,
 
+    #[token("..")]
+    RangeSeparator,
+
     #[token("!")]
     Exclamation,
 

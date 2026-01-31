@@ -1,6 +1,7 @@
 use super::parse_invocation;
 use crate::err;
 use crate::model::BinaryConcatenation;
+use crate::model::FunctionInvocation;
 use crate::model::Type;
 use crate::model::Value;
 use crate::model::convert_to_binvector;
@@ -26,6 +27,26 @@ pub fn parse_binary_expr(p: &mut Parser) -> crate::Result<Value> {
                 if matches!(p.lookahead(1), Token::OpenParen) {
                     let call = parse_invocation(p)?;
                     args.push(call);
+                } else if matches!(p.lookahead(1), Token::OpenSquareParen) {
+                    // ident[hi .. lo]
+                    let ident = ident.to_owned();
+                    p.consume();
+                    p.expect(Token::OpenSquareParen)?;
+                    let hi = p.number()?;
+                    p.expect(Token::RangeSeparator)?;
+                    let lo = p.number()?;
+                    p.expect(Token::CloseSquareParen)?;
+
+                    let fun = FunctionInvocation {
+                        name: "asm::bitvector_subvector".to_string(),
+                        args: vec![
+                            Value::Symbol(ident),
+                            Value::Integer(hi.try_into()?),
+                            Value::Integer(lo.try_into()?),
+                        ],
+                    };
+
+                    args.push(Value::FunctionInvocation(fun));
                 } else {
                     let ident = ident.to_owned();
                     p.consume();
