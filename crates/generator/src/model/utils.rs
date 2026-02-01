@@ -47,7 +47,6 @@ pub fn rewrite(value: &Value, callback: &dyn Fn(&Value) -> Option<Value>) -> Val
         | Value::Integer(..)
         | Value::EnumLabel(..)
         | Value::Boolean(..)
-        | Value::SymbolCast(..)
         | Value::Symbol(..) => callback(value).unwrap_or_else(|| value.clone()),
         Value::StringConcatenation(args) => {
             let newval = Value::StringConcatenation(rewrite_list(args, callback));

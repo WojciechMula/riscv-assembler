@@ -299,15 +299,6 @@ fn match_bitconcatenation(v: &BitVector, c: &BinaryConcatenation) -> MatchResult
 
                 input = input.shr(bv.bit_width);
             }
-            Value::SymbolCast(name, Type::BitVector(bit_width)) => {
-                let bit_width = *bit_width;
-                let mask = (1_u64 << bit_width) - 1;
-                let v = BitVector::try_new(input.val & mask, bit_width).unwrap();
-
-                variables.insert(name.clone(), v);
-
-                input = input.shr(bit_width);
-            }
             Value::Cast(item, Type::BitVector(bit_width)) => {
                 let bit_width = *bit_width;
                 let mask = (1_u64 << bit_width) - 1;

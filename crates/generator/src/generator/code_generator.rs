@@ -862,16 +862,6 @@ fn make_binary_concatenation_deconstruction(
 
                 offset += bit_width;
             }
-            Value::SymbolCast(symbol, typ) => {
-                let bit_width = typ.as_bitvector()?;
-                let typ = rust_bitvector_type(bit_width);
-                w!(
-                    f,
-                    "let {symbol} = {typ}::from_subword({binding}.val >> {offset});"
-                );
-
-                offset += bit_width;
-            }
             Value::Cast(symbol, typ) => {
                 let bit_width = typ.as_bitvector()?;
                 let symbol = symbol.as_ref().as_symbol()?;
@@ -930,7 +920,6 @@ fn rust_fn_call(call: &FunctionInvocation) -> String {
 
         match val {
             Value::Symbol(ident) => f += ident,
-            Value::SymbolCast(ident, _) => f += ident,
             _ => panic!("unsupported `{val:?}`"),
         }
     }

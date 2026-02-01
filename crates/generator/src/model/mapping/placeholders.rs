@@ -21,20 +21,6 @@ pub fn expand_bitvector_placeholders(p: &Pair, already_defined: &HashSet<u64>) -
                 variables.push(String::new());
                 possible_values.push(vec![arg.clone()]);
             }
-            Value::SymbolCast(name, typ) => {
-                let Type::BitVector(bit_width) = typ else {
-                    panic!("expected bit vector type, got {typ:?}");
-                };
-                let bit_width = *bit_width;
-
-                let max_value = 1_u64 << bit_width;
-                let values = (0..max_value)
-                    .map(|val| Value::BitVector(BitVector { val, bit_width }))
-                    .collect();
-
-                variables.push(name.clone());
-                possible_values.push(values);
-            }
             _ => panic!("{arg:?}"),
         }
     }
