@@ -2,6 +2,7 @@ use crate::err;
 use crate::generator::code_generator::CodeGenerator;
 use crate::generator::csr::CsrList;
 use crate::generator::extensions::Extensions;
+use crate::generator::resolve_enums::ResolvedType;
 use crate::generator::resolve_enums::ResolvedTypes;
 use crate::generator::resolve_enums::resolve_bitvector_enums;
 use crate::generator::resolve_enums::resolve_enums;
@@ -17,7 +18,6 @@ use crate::model::Pair;
 use crate::model::Type;
 use crate::model::Union;
 use crate::model::Value;
-use crate::sail::IdentifierKind;
 use crate::sail::Sail;
 use crate::sail::patch::patch_assembly_definitions;
 use log::debug;
@@ -41,8 +41,9 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     let contents = std::fs::read_to_string(input)?;
 
     let mut sail = Sail::new(contents);
+    let mut types = ResolvedTypes::default();
 
-    let (signatures, mut map_string, map_binary) = initialize(&mut sail)?;
+    let (signatures, mut map_string, map_binary) = initialize(&mut sail, &mut types)?;
 
     info!("Patching some definitions");
     for mapping in map_string.iter_mut() {
@@ -58,8 +59,6 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
 
         map_string.push(mapping);
     }
-
-    let mut types = ResolvedTypes::default();
 
     info!("Resolving enums present in constructors");
     resolve_enums(&mut types, &signatures, &sail)?;
@@ -122,37 +121,37 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     Ok(())
 }
 
-fn initialize(sail: &mut Sail) -> crate::Result<(Union, Vec<Mapping>, Vec<Mapping>)> {
+fn initialize(
+    sail: &mut Sail,
+    types: &mut ResolvedTypes,
+) -> crate::Result<(Union, Vec<Mapping>, Vec<Mapping>)> {
     let instruction_type = "instruction";
     info!("Looking for `{instruction_type}` union");
     let mut instructions = sail.get_union(instruction_type)?;
     for typ in instructions.0.values_mut() {
         match typ {
-            Type::Ident(ident) => match sail.what_is(ident) {
-                IdentifierKind::Mapping => {
-                    *typ = Type::Mapping(ident.clone());
-                }
-                IdentifierKind::Enum => {
-                    *typ = Type::Enum(ident.clone());
+            Type::Ident(ident) => match types.resolve_identifier(ident, sail)? {
+                ResolvedType::Type(newtype) => {
+                    *typ = newtype;
                 }
                 _ => (),
             },
             Type::Tuple(args) => {
                 for typ in args.iter_mut() {
                     if let Type::Ident(ident) = typ {
-                        match sail.what_is(ident) {
-                            IdentifierKind::Mapping => {
-                                *typ = Type::Mapping(ident.clone());
-                            }
-                            IdentifierKind::Enum => {
-                                *typ = Type::Enum(ident.clone());
+                        match types.resolve_identifier(ident, sail)? {
+                            ResolvedType::Type(newtype) => {
+                                *typ = newtype;
                             }
                             _ => (),
                         }
                     }
                 }
             }
-            _ => (),
+            Type::BitVector(_) | Type::Unit => (),
+            _ => {
+                return err!("unresolved type {typ:?}");
+            }
         }
     }
 

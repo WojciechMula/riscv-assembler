@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 pub struct ResolvedTypes {
     pub enums: BTreeMap<String, ResolvedEnum>,
     pub structs: BTreeMap<String, StructSignature>,
+    pub mappings: BTreeMap<String, Mapping>,
 }
 
 #[derive(Default, Debug)]
@@ -36,7 +37,59 @@ pub struct ResolvedEnumItem {
     pub string: String,
 }
 
+pub enum ResolvedType {
+    None,
+    Overriden,
+    Type(Type),
+    Struct(String),
+}
+
 impl ResolvedTypes {
+    pub fn resolve_identifier(&mut self, name: &str, sail: &Sail) -> crate::Result<ResolvedType> {
+        if is_type_overriden(name) {
+            return Ok(ResolvedType::Overriden);
+        }
+
+        if self.enums.contains_key(name) {
+            return Ok(ResolvedType::Type(Type::Enum(name.to_string())));
+        }
+        if self.structs.contains_key(name) {
+            return Ok(ResolvedType::Struct(name.to_string()));
+        }
+        if self.mappings.contains_key(name) {
+            return Ok(ResolvedType::Type(Type::Mapping(name.to_string())));
+        }
+
+        match sail.what_is(name) {
+            IdentifierKind::Mapping => {
+                let v = sail.mapping(name)?;
+                self.mappings.insert(name.to_string(), v);
+
+                Ok(ResolvedType::Type(Type::Mapping(name.to_string())))
+            }
+            IdentifierKind::Struct => {
+                let val = sail.get_struct(name)?;
+                self.structs.insert(name.to_string(), val);
+
+                Ok(ResolvedType::Struct(name.to_string()))
+            }
+            IdentifierKind::Enum => {
+                let val = sail.get_enum(name)?;
+
+                let mut resolved = ResolvedEnum::new(&name);
+                for label in val.labels {
+                    resolved.items.push(ResolvedEnumItem::new(label));
+                }
+                self.enums.insert(name.to_string(), resolved);
+
+                Ok(ResolvedType::Type(Type::Enum(name.to_string())))
+            }
+            IdentifierKind::Other => {
+                err!("type {name} cannot be identified")
+            }
+        }
+    }
+
     pub fn resolve_idents(&self, typ: &Type, sail: &Sail) -> Type {
         match typ {
             Type::Enum(_) | Type::String | Type::Set(..) | Type::Boolean | Type::BitVector(..) => {
@@ -69,6 +122,15 @@ impl ResolvedTypes {
             }
             _ => todo!("{typ:?}"),
         }
+    }
+
+    pub fn mapping(&mut self, name: &str, sail: &Sail) -> crate::Result<&Mapping> {
+        if !self.mappings.contains_key(name) {
+            let mapping = sail.mapping(name)?;
+            self.mappings.insert(name.to_string(), mapping);
+        }
+
+        Ok(self.mappings.get(name).as_ref().unwrap())
     }
 }
 
@@ -176,34 +238,38 @@ pub fn resolve_string_enums(
                 continue;
             }
 
-            let Ok(sig) = sail.mapping_signature(mapping_name) else {
-                continue;
-            };
+            let mut tmp = Vec::<(String, String)>::new();
+            let mut enum_typename = String::new();
+            {
+                let Ok(mapping) = types.mapping(mapping_name, sail) else {
+                    continue;
+                };
+                if !mapping.signature.rhs.is_string() {
+                    continue;
+                };
 
-            if !sig.rhs.is_string() {
-                continue;
+                let Some(name) = mapping.signature.lhs.as_enum() else {
+                    continue;
+                };
+                enum_typename = name.clone();
+
+                for Pair { lhs, rhs, .. } in &mapping.pairs {
+                    let label = lhs.as_symbol()?;
+                    let string = rhs.as_string()?;
+
+                    tmp.push((label.to_string(), string.clone()));
+                }
             }
 
-            let Some(enum_typename) = sig.lhs.as_enum() else {
-                continue;
-            };
-
-            let Ok(mapping) = sail.mapping(mapping_name) else {
-                continue;
-            };
-
-            let Some(resolved) = types.enums.get_mut(enum_typename) else {
+            let Some(resolved) = types.enums.get_mut(&enum_typename) else {
                 return err!("unhandled `{enum_typename}`");
             };
 
             debug!("resolving {enum_typename}");
             resolved.string_to_enum = mapping_name.clone();
-            for Pair { lhs, rhs, .. } in &mapping.pairs {
-                let label = lhs.as_symbol()?;
-                let string = rhs.as_string()?;
-
-                let item = resolved.get_mut_by_label(label)?;
-                item.string = string.clone();
+            for (label, string) in tmp.drain(..) {
+                let item = resolved.get_mut_by_label(&label)?;
+                item.string = string;
             }
         }
     }
@@ -239,34 +305,39 @@ pub fn resolve_bitvector_enums(
                         continue;
                     }
 
-                    let Ok(sig) = sail.mapping_signature(mapping_name) else {
-                        continue;
-                    };
+                    let mut tmp = Vec::<(String, BitVector)>::new();
+                    let mut enum_typename = String::new();
+                    {
+                        let Ok(mapping) = types.mapping(mapping_name, sail) else {
+                            continue;
+                        };
 
-                    if !sig.rhs.is_bitvector() {
-                        continue;
-                    };
+                        if !mapping.signature.rhs.is_bitvector() {
+                            continue;
+                        };
 
-                    let Some(enum_typename) = sig.lhs.as_enum() else {
-                        continue;
-                    };
+                        let Some(name) = mapping.signature.lhs.as_enum() else {
+                            continue;
+                        };
+                        enum_typename = name.clone();
 
-                    let Ok(mapping) = sail.mapping(mapping_name) else {
-                        continue;
-                    };
+                        for Pair { lhs, rhs, .. } in &mapping.pairs {
+                            let label = lhs.as_symbol()?;
+                            let bv = rhs.as_bitvector()?;
 
-                    let Some(resolved) = types.enums.get_mut(enum_typename) else {
+                            tmp.push((label.to_string(), bv.clone()));
+                        }
+                    }
+
+                    let Some(resolved) = types.enums.get_mut(&enum_typename) else {
                         return err!("unhandled `{enum_typename}`");
                     };
 
                     debug!("resolving {enum_typename}");
                     resolved.enum_to_bitvector = mapping_name.clone();
-                    for Pair { lhs, rhs, .. } in &mapping.pairs {
-                        let label = lhs.as_symbol()?;
-                        let bv = rhs.as_bitvector()?;
-
-                        let item = resolved.get_mut_by_label(label)?;
-                        item.value = bv.clone();
+                    for (label, bv) in tmp.drain(..) {
+                        let item = resolved.get_mut_by_label(&label)?;
+                        item.value = bv;
                     }
                 }
             }

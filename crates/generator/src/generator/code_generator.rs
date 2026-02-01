@@ -272,6 +272,10 @@ impl CodeGenerator {
                 Value::FunctionInvocation(FunctionInvocation { name, args }) => {
                     if let Some(name) = crate::custom_function(name) {
                         match name {
+                            "csr_name_map" => {
+                                let binding = &args[0].as_symbol()?;
+                                w!(f, "let {binding} = {name}(parser)?;");
+                            }
                             _ => todo!(),
                         }
                     } else if name == "sep" {
