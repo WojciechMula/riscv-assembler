@@ -630,6 +630,13 @@ impl CodeGenerator {
                     f += &format!("({}.val << {})", ident, offset);
                     offset += bit_width;
                 }
+                Value::Cast(ident, typ) => {
+                    let bit_width = typ.as_bitvector()?;
+                    let ident = ident.as_ref().as_symbol()?;
+
+                    f += &format!("({}.val << {})", ident, offset);
+                    offset += bit_width;
+                }
                 Value::Symbol(ident) => {
                     w!(f, "{ident}");
                 }
@@ -835,6 +842,17 @@ fn make_binary_concatenation_deconstruction(
             }
             Value::SymbolCast(symbol, typ) => {
                 let bit_width = typ.as_bitvector()?;
+                let typ = rust_bitvector_type(bit_width);
+                w!(
+                    f,
+                    "let {symbol} = {typ}::from_subword({binding}.val >> {offset});"
+                );
+
+                offset += bit_width;
+            }
+            Value::Cast(symbol, typ) => {
+                let bit_width = typ.as_bitvector()?;
+                let symbol = symbol.as_ref().as_symbol()?;
                 let typ = rust_bitvector_type(bit_width);
                 w!(
                     f,

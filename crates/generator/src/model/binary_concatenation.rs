@@ -28,6 +28,7 @@ impl BinaryConcatenation {
         for val in self.0.iter() {
             let bit_width = match val {
                 Value::BitVector(bv) => bv.bit_width,
+                Value::Cast(_, Type::BitVector(bit_width)) => *bit_width,
                 Value::SymbolCast(.., Type::BitVector(bit_width)) => *bit_width,
                 _ => return None,
             };

@@ -1,7 +1,5 @@
 use super::parse_array;
-use super::parse_binary_expr;
 use super::parse_invocation;
-use super::parse_list;
 use super::parse_struct;
 use crate::err;
 use crate::model::BinaryConcatenation;
@@ -126,19 +124,23 @@ fn parse_single_expression(p: &mut Parser) -> crate::Result<Value> {
             }
         }
         Token::OpenParen => {
-            if matches!(p.lookahead(1), Token::Identifier(_))
-                && matches!(p.lookahead(2), Token::Colon)
-            {
-                let concat = parse_binary_expr(p)?;
-                Ok(concat)
-            } else {
-                p.consume();
-                let mut exprs = parse_list(p)?;
-                if exprs.len() != 1 {
-                    Ok(Value::Tuple(exprs))
-                } else {
-                    Ok(exprs.pop().unwrap())
+            p.consume();
+
+            let mut exprs = Vec::<Value>::new();
+            loop {
+                let expr = parse_expression(p)?;
+                exprs.push(expr);
+
+                if !p.try_consume(Token::Comma) {
+                    break;
                 }
+            }
+            p.expect(Token::CloseParen)?;
+
+            if exprs.len() != 1 {
+                Ok(Value::Tuple(exprs))
+            } else {
+                Ok(exprs.pop().unwrap())
             }
         }
         Token::OpenSquareParen => {

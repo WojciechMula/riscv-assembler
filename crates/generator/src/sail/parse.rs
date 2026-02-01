@@ -1,5 +1,4 @@
 mod parse_array;
-mod parse_binary_expr;
 mod parse_enum;
 mod parse_expression;
 mod parse_invocation;
@@ -10,7 +9,6 @@ mod parse_type;
 mod parse_union;
 
 pub use parse_array::parse_array;
-pub use parse_binary_expr::parse_binary_expr;
 pub use parse_enum::parse_enum;
 pub use parse_expression::parse_expression;
 pub use parse_invocation::parse_invocation;

@@ -1,4 +1,5 @@
 use crate::err;
+use crate::errfmt;
 use crate::generator::ResolvedTypes;
 use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
@@ -307,7 +308,20 @@ fn match_bitconcatenation(v: &BitVector, c: &BinaryConcatenation) -> MatchResult
 
                 input = input.shr(bit_width);
             }
-            _ => return MatchResult::Err(format!("unsupported {val:?}").into()),
+            Value::Cast(item, Type::BitVector(bit_width)) => {
+                let bit_width = *bit_width;
+                let mask = (1_u64 << bit_width) - 1;
+                let v = BitVector::try_new(input.val & mask, bit_width).unwrap();
+
+                let Value::Symbol(name) = item.as_ref() else {
+                    return MatchResult::Err(errfmt!("unsupported cast from {val:?}").into());
+                };
+
+                variables.insert(name.clone(), v);
+
+                input = input.shr(bit_width);
+            }
+            _ => return MatchResult::Err(errfmt!("unsupported {val:?}").into()),
         }
     }
 
