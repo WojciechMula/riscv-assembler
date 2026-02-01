@@ -11,7 +11,9 @@ impl BinaryConcatenation {
         self.0.iter().any(|val| match val {
             Value::BitVector(..) => false,
             Value::SymbolCast(.., typ) => !typ.is_bitvector(),
+            Value::Cast(.., typ) => !typ.is_bitvector(),
             Value::Integer(..) => true,
+            Value::BinaryConcatenation(..) => true,
             _ => todo!("{self:?}"),
         })
     }
@@ -53,6 +55,10 @@ fn normalize_inplace(bc: &mut BinaryConcatenation, t: &Type) -> crate::Result<()
                 known_width += *bit_width;
             }
             Value::SymbolCast(_, typ) => {
+                let bit_width = typ.as_bitvector()?;
+                known_width += bit_width;
+            }
+            Value::Cast(_, typ) => {
                 let bit_width = typ.as_bitvector()?;
                 known_width += bit_width;
             }

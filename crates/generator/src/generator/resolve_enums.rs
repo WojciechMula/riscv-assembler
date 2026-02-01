@@ -1,4 +1,5 @@
 use crate::err;
+use crate::is_custom_function;
 use crate::model::BitVector;
 use crate::model::FunctionInvocation;
 use crate::model::Instruction;
@@ -156,7 +157,6 @@ pub fn resolve_string_enums(
     sail: &Sail,
 ) -> crate::Result<()> {
     let mut seen = BTreeSet::<String>::new();
-    seen.insert("resolve_label".to_string()); // XXX
 
     for instr in instructions {
         debug!("checking {}", instr.mnemonic);
@@ -169,6 +169,10 @@ pub fn resolve_string_enums(
             };
 
             if !seen.insert(mapping_name.clone()) {
+                continue;
+            }
+
+            if is_custom_function(mapping_name) {
                 continue;
             }
 
@@ -228,6 +232,10 @@ pub fn resolve_bitvector_enums(
                     };
 
                     if !seen.insert(mapping_name.clone()) {
+                        continue;
+                    }
+
+                    if is_custom_function(mapping_name) {
                         continue;
                     }
 

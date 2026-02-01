@@ -1,4 +1,5 @@
 use crate::err;
+use crate::errfmt;
 use crate::generator::Extensions;
 use crate::generator::Instruction;
 use crate::generator::ResolvedTypes;
@@ -269,9 +270,13 @@ impl CodeGenerator {
         for val in &instruction.string.args {
             match val {
                 Value::FunctionInvocation(FunctionInvocation { name, args }) => {
-                    if name == "sep" {
+                    if let Some(name) = crate::custom_function(name) {
+                        match name {
+                            _ => todo!(),
+                        }
+                    } else if name == "sep" {
                         w!(f, "parser.expect_comma()?;");
-                    } else if name == "opt_spc" {
+                    } else if name == "opt_spc" || name == "spc" {
                         w!(f, "parser.skip_ws();");
                     } else if name == "sp_reg_name" {
                         crate::assert_equals(args.len(), 0, "".to_string())?;
@@ -296,7 +301,7 @@ impl CodeGenerator {
                     } else {
                         let sig = sail.mapping_signature(name)?;
 
-                        crate::assert_equals(args.len(), 1, "".to_string())?;
+                        crate::assert_equals(args.len(), 1, errfmt!("{name}"))?;
                         let tmp = "tmp";
                         let binding = match &args[0] {
                             Value::Symbol(binding) => binding,
@@ -605,30 +610,43 @@ impl CodeGenerator {
                     offset += bv.bit_width;
                 }
                 Value::FunctionInvocation(call) => {
-                    let sig = sail.mapping_signature(&call.name)?;
+                    if let Some(name) = crate::custom_function(&call.name) {
+                        match name {
+                            "bitvector_subvector" => {
+                                let symbol = call.args[0].as_symbol()?;
+                                let hi = call.args[1].as_integer()?;
+                                let lo = call.args[1].as_integer()?;
 
-                    let bit_width = if let Type::BitVector(bv) = &sig.rhs {
-                        *bv
-                    } else if let Type::BitVector(bv) = &sig.lhs {
-                        *bv
+                                let bit_width = hi - lo + 1;
+                                let mask = (1 << bit_width) - 1;
+
+                                let rust = format!("(({symbol}.val >> {lo}) & 0b{mask:b})");
+                                f += &rust;
+
+                                offset += bit_width as usize;
+                            }
+                            _ => {
+                                todo!();
+                            }
+                        }
                     } else {
-                        return err!(
-                            "mapping {} does not map bitvector; its signature is {:?}",
-                            call.name,
-                            sig
-                        );
-                    };
+                        let sig = sail.mapping_signature(&call.name)?;
 
-                    f += &format!("({}.val << {})", rust_fn_call(call), offset);
-                    offset += bit_width;
-                }
-                Value::SymbolCast(ident, typ) => {
-                    let Ok(bit_width) = typ.as_bitvector() else {
-                        return err!("not a cast to binary; got {val:?}");
-                    };
+                        let bit_width = if let Type::BitVector(bv) = &sig.rhs {
+                            *bv
+                        } else if let Type::BitVector(bv) = &sig.lhs {
+                            *bv
+                        } else {
+                            return err!(
+                                "mapping {} does not map bitvector; its signature is {:?}",
+                                call.name,
+                                sig
+                            );
+                        };
 
-                    f += &format!("({}.val << {})", ident, offset);
-                    offset += bit_width;
+                        f += &format!("({}.val << {})", rust_fn_call(call), offset);
+                        offset += bit_width;
+                    }
                 }
                 Value::Cast(ident, typ) => {
                     let bit_width = typ.as_bitvector()?;

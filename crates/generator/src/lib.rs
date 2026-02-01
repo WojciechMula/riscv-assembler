@@ -25,3 +25,11 @@ macro_rules! err {
 pub fn assert_equals<T: std::cmp::PartialEq>(a: T, b: T, msg: String) -> crate::Result<()> {
     if a == b { Ok(()) } else { Err(msg.into()) }
 }
+
+pub fn is_custom_function(name: &str) -> bool {
+    name.starts_with("asm::")
+}
+
+pub fn custom_function(name: &str) -> Option<&str> {
+    name.strip_prefix("asm::")
+}
