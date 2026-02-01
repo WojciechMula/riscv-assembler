@@ -345,8 +345,9 @@ mod test {
 
         let sail = Sail::new(code.to_string());
         let mapping = sail.mapping("assembly").unwrap();
+        let types = ResolvedTypes::default();
 
-        let expanded = expand_mnemonics(&mapping, &sail).unwrap();
+        let expanded = expand_mnemonics(&types, &mapping, &sail).unwrap();
 
         assert_eq!(expanded.len(), 3);
         assert_eq!(expanded[2].mnemonic, "csrrc");
@@ -392,13 +393,17 @@ mod test {
         }
     }
 
+    fn sym(s: &str) -> Box<Value> {
+        Box::new(Value::Symbol(s.into()))
+    }
+
     #[test]
     fn test_match_binary_case2() {
         let bv = BitVector::try_new(0b11_110_1_010, 9).unwrap();
         let bc = BinaryConcatenation(vec![
             Value::BitVector(BitVector::try_new(0b11, 2).unwrap()),
-            Value::SymbolCast("foo".into(), Type::BitVector(3)),
-            Value::SymbolCast("bar".into(), Type::BitVector(1)),
+            Value::Cast(sym("foo"), Type::BitVector(3)),
+            Value::Cast(sym("bar"), Type::BitVector(1)),
             Value::BitVector(BitVector::try_new(0b010, 3).unwrap()),
         ]);
 

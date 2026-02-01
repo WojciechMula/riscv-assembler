@@ -94,13 +94,17 @@ mod test {
         Value::BitVector(bv)
     }
 
+    fn sym(s: &str) -> Box<Value> {
+        Box::new(Value::Symbol(s.into()))
+    }
+
     #[test]
     fn test_normalize_bitconcat() {
         let concat = BinaryConcatenation(vec![
             bitvector(0, 3),
             bitvector(0, 4),
             Value::Integer(42),
-            Value::SymbolCast("x".into(), Type::BitVector(7)),
+            Value::Cast(sym("x"), Type::BitVector(7)),
         ]);
 
         let typ = Type::BitVector(20);
@@ -109,7 +113,7 @@ mod test {
             bitvector(0, 3),
             bitvector(0, 4),
             bitvector(42, 20 - (3 + 4 + 7)),
-            Value::SymbolCast("x".into(), Type::BitVector(7)),
+            Value::Cast(sym("x"), Type::BitVector(7)),
         ];
 
         assert!(concat.needs_normalisation());
