@@ -1,6 +1,7 @@
 mod binary_concatenation;
 mod bitvector;
 mod bitvector_utils;
+mod builtin;
 mod r#enum;
 mod function_invocation;
 mod mapping;
@@ -18,6 +19,7 @@ pub use utils::*;
 
 pub use binary_concatenation::BinaryConcatenation;
 pub use bitvector::BitVector;
+pub use builtin::Builtin;
 pub use r#enum::Enum;
 pub use function_invocation::FunctionInvocation;
 pub use mapping::ExpandMapping;

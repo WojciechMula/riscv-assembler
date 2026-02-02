@@ -104,7 +104,6 @@ mod test {
         let expanded = expand_dec_bits_string_mapping(&pair).unwrap();
 
         assert_eq!(expanded.len(), 8);
-        println!("{:?}", expanded);
 
         for (expected, pair) in expanded.iter().enumerate() {
             let Value::BitVector(got) = &pair.lhs else {

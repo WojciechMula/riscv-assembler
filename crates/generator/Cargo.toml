@@ -8,3 +8,7 @@ anyhow = "1.0.100"
 log = "0.4.29"
 logos = "0.16.0"
 stderrlog = { version="0.6.0", features = []}
+
+[lints.clippy]
+collapsible_if = "allow"
+single_match = "allow"

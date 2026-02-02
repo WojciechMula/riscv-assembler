@@ -1,4 +1,3 @@
-use super::StructSignature;
 use crate::err;
 use crate::sail::Parser;
 use crate::sail::parse::parse_type;
@@ -13,7 +12,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     Enum(String),
     Mapping(String),
-    Struct(StructSignature),
+    Struct(String),
     String,
 }
 

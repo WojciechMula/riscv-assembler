@@ -17,6 +17,7 @@ use crate::generator::rust_signature::RustSignatureBuilder;
 use crate::model::BinaryConcatenation;
 use crate::model::BinaryConstructor;
 use crate::model::BitVector;
+use crate::model::Builtin;
 use crate::model::FunctionInvocation;
 use crate::model::MappingSignature;
 use crate::model::StructSignature;
@@ -249,7 +250,7 @@ impl CodeGenerator {
                     Value::Struct(structure) => {
                         w!(f, "let {name} = {}{{", structure.typename);
                         for (fieldname, value) in &structure.values {
-                            w!(f, "{fieldname}: {},", rust_expression(&value));
+                            w!(f, "{fieldname}: {},", rust_expression(value));
                         }
                         w!(f, "}};");
                     }
@@ -269,100 +270,90 @@ impl CodeGenerator {
         }
         for val in &instruction.string.args {
             match val {
-                Value::FunctionInvocation(FunctionInvocation { name, args }) => {
-                    if let Some(name) = crate::custom_function(name) {
-                        match name {
-                            "csr_name_map" => {
-                                let binding = &args[0].as_symbol()?;
-                                w!(f, "let {binding} = {name}(parser)?;");
-                            }
-                            _ => todo!(),
-                        }
-                    } else if name == "sep" {
+                Value::Builtin(b) => match b {
+                    Builtin::Separator => {
                         w!(f, "parser.expect_comma()?;");
-                    } else if name == "opt_spc" || name == "spc" {
+                    }
+                    Builtin::Space | Builtin::OptionalSpace => {
                         w!(f, "parser.skip_ws();");
-                    } else if name == "sp_reg_name" {
-                        crate::assert_equals(args.len(), 0, "".to_string())?;
-                        w!(f, "{name}(parser)?;");
-                    } else if name == "maybe_nonzero_imm_6" {
-                        crate::assert_equals(args.len(), 1, "".to_string())?;
-                        let binding = args[0].as_symbol()?;
-                        w!(f, "let {binding} = {name}(parser)?;");
-                    } else if name == "csr_name_map" {
-                        crate::assert_equals(args.len(), 1, "".to_string())?;
-                        let binding = args[0].as_symbol()?;
-                        w!(f, "let {binding} = {name}(parser)?;");
-                    } else if name == "optional_signed_12" {
-                        crate::assert_equals(args.len(), 1, "".to_string())?;
-                        let binding = args[0].as_symbol()?;
-                        w!(f, "let {binding} = {name}(parser)?;");
-                    } else if name == "resolve_label" {
-                        crate::assert_equals(args.len(), 2, "".to_string())?;
-                        let binding = args[0].as_symbol()?;
-                        w!(f, "let {binding} = {name}::<13>(parser, l)?;"); // XXX
-                        needs_label = true;
-                    } else {
-                        let sig = sail.mapping_signature(name)?;
+                    }
+                    Builtin::OptionalSigned { k, binding } => {
+                        w!(f, "let {binding} = parser.optional_signed::<{k}>()?;");
+                    }
+                    Builtin::MaybeNonzero { k, binding } => {
+                        w!(
+                            f,
+                            "let {binding} = parser.optional_unsigned_nonzero::<{k}>()?;"
+                        );
+                    }
+                    Builtin::StackPointer => {
+                        w!(f, "sp_reg_name(parser)?;");
+                    }
+                    Builtin::CsrName { binding } => {
+                        w!(f, "let {binding} = csr_name_map(parser)?;");
+                    }
+                    Builtin::SubVector { .. } => unreachable!(),
+                },
+                Value::FunctionInvocation(FunctionInvocation { name, args }) => {
+                    let sig = sail.mapping_signature(name)?;
 
-                        crate::assert_equals(args.len(), 1, errfmt!("{name}"))?;
-                        let tmp = "tmp";
-                        let binding = match &args[0] {
-                            Value::Symbol(binding) => binding,
-                            Value::BinaryConcatenation(_) | Value::Tuple(_) => tmp,
-                            _ => return err!("unsupported `{:?}`", args[0]),
-                        };
+                    crate::assert_equals(args.len(), 1, errfmt!("{name} {sig:?}"))?;
+                    let tmp = "tmp";
+                    let binding = match &args[0] {
+                        Value::Symbol(binding) => binding,
+                        Value::BinaryConcatenation(_) | Value::Tuple(_) => tmp,
+                        _ => return err!("unsupported `{:?}`", args[0]),
+                    };
 
-                        if let Some((bit_width, signed)) = is_number_conversion(name, &sig) {
-                            if signed {
-                                w!(
-                                    f,
-                                    "let {binding} = parser.expect_signed_immediate::<{bit_width}>()?;"
-                                );
-                            } else {
-                                w!(
-                                    f,
-                                    "let {binding} = parser.expect_unsigned_immediate::<{bit_width}>()?;"
-                                );
-                            }
+                    if let Some((bit_width, signed)) = is_number_conversion(name, &sig) {
+                        if signed {
+                            w!(
+                                f,
+                                "let {binding} = parser.expect_signed_immediate::<{bit_width}>()?;"
+                            );
                         } else {
-                            w!(f, "let {binding} = {name}(parser)?;");
+                            w!(
+                                f,
+                                "let {binding} = parser.expect_unsigned_immediate::<{bit_width}>()?;"
+                            );
+                        }
+                    } else {
+                        w!(f, "let {binding} = {name}(parser)?;");
+                    }
+
+                    if let Value::BinaryConcatenation(bc) = &args[0] {
+                        if bc.needs_normalisation() {
+                            let bc = bc.normalize(&sig.lhs)?;
+
+                            f += &make_binary_concatenation_deconstruction(binding, &bc)?;
+                        } else {
+                            f += &make_binary_concatenation_deconstruction(binding, bc)?;
+                        }
+                    }
+
+                    if let Value::Tuple(args) = &args[0] {
+                        let fn_sig = sail.mapping_signature(name)?;
+                        let types = fn_sig.rhs.as_tuple()?;
+                        let mut shift = 0;
+
+                        if args.len() != types.len() {
+                            return err!(
+                                "incompatible values and type: `{args:?}` and `{types:?}`"
+                            );
                         }
 
-                        if let Value::BinaryConcatenation(bc) = &args[0] {
-                            if bc.needs_normalisation() {
-                                let bc = bc.normalize(&sig.lhs)?;
+                        for i in (0..args.len()).rev() {
+                            let symbol = args[i].as_symbol()?;
+                            let bit_width = types[i].as_bitvector()?;
 
-                                f += &make_binary_concatenation_deconstruction(binding, &bc)?;
-                            } else {
-                                f += &make_binary_concatenation_deconstruction(binding, bc)?;
-                            }
-                        }
+                            w!(
+                                f,
+                                "let val = ({binding} >> {shift}) & ((1 << {bit_width}) - 1);"
+                            );
+                            let bit_vector = rust_bitvector_type(bit_width);
+                            w!(f, "let {symbol} = {bit_vector}::new(val);");
 
-                        if let Value::Tuple(args) = &args[0] {
-                            let fn_sig = sail.mapping_signature(name)?;
-                            let types = fn_sig.rhs.as_tuple()?;
-                            let mut shift = 0;
-
-                            if args.len() != types.len() {
-                                return err!(
-                                    "incompatible values and type: `{args:?}` and `{types:?}`"
-                                );
-                            }
-
-                            for i in (0..args.len()).rev() {
-                                let symbol = args[i].as_symbol()?;
-                                let bit_width = types[i].as_bitvector()?;
-
-                                w!(
-                                    f,
-                                    "let val = ({binding} >> {shift}) & ((1 << {bit_width}) - 1);"
-                                );
-                                let bit_vector = rust_bitvector_type(bit_width);
-                                w!(f, "let {symbol} = {bit_vector}::new(val);");
-
-                                shift += bit_width;
-                            }
+                            shift += bit_width;
                         }
                     }
                 }
@@ -614,43 +605,22 @@ impl CodeGenerator {
                     offset += bv.bit_width;
                 }
                 Value::FunctionInvocation(call) => {
-                    if let Some(name) = crate::custom_function(&call.name) {
-                        match name {
-                            "bitvector_subvector" => {
-                                let symbol = call.args[0].as_symbol()?;
-                                let hi = call.args[1].as_integer()?;
-                                let lo = call.args[1].as_integer()?;
+                    let sig = sail.mapping_signature(&call.name)?;
 
-                                let bit_width = hi - lo + 1;
-                                let mask = (1 << bit_width) - 1;
-
-                                let rust = format!("(({symbol}.val >> {lo}) & 0b{mask:b})");
-                                f += &rust;
-
-                                offset += bit_width as usize;
-                            }
-                            _ => {
-                                todo!();
-                            }
-                        }
+                    let bit_width = if let Type::BitVector(bv) = &sig.rhs {
+                        *bv
+                    } else if let Type::BitVector(bv) = &sig.lhs {
+                        *bv
                     } else {
-                        let sig = sail.mapping_signature(&call.name)?;
+                        return err!(
+                            "mapping {} does not map bitvector; its signature is {:?}",
+                            call.name,
+                            sig
+                        );
+                    };
 
-                        let bit_width = if let Type::BitVector(bv) = &sig.rhs {
-                            *bv
-                        } else if let Type::BitVector(bv) = &sig.lhs {
-                            *bv
-                        } else {
-                            return err!(
-                                "mapping {} does not map bitvector; its signature is {:?}",
-                                call.name,
-                                sig
-                            );
-                        };
-
-                        f += &format!("({}.val << {})", rust_fn_call(call), offset);
-                        offset += bit_width;
-                    }
+                    f += &format!("({}.val << {})", rust_fn_call(call), offset);
+                    offset += bit_width;
                 }
                 Value::Cast(ident, typ) => {
                     let bit_width = typ.as_bitvector()?;
@@ -662,6 +632,18 @@ impl CodeGenerator {
                 Value::Symbol(ident) => {
                     w!(f, "{ident}");
                 }
+                Value::Builtin(fun) => match fun {
+                    Builtin::SubVector { binding, lo, hi } => {
+                        let bit_width = hi - lo + 1;
+                        let mask = (1 << bit_width) - 1;
+
+                        let rust = format!("(({binding}.val >> {lo}) & 0b{mask:b})");
+                        f += &rust;
+
+                        offset += bit_width;
+                    }
+                    _ => unreachable!("{fun:?}"),
+                },
                 _ => {
                     debug!("{binary:?}");
                     panic!("unexpected {val:?}");
@@ -890,7 +872,7 @@ fn rust_typename(t: &Type) -> String {
         Type::BitVector(bit_width) => rust_bitvector_type(*bit_width),
         Type::Boolean => "bool".to_string(),
         Type::Set(..) => "usize".to_string(),
-        Type::Struct(desc) => desc.name.clone(),
+        Type::Struct(ident) => ident.clone(),
         _ => panic!("unsupported `{t:?}`"),
     }
 }

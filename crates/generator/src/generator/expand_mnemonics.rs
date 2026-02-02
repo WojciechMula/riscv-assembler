@@ -3,11 +3,10 @@ use crate::errfmt;
 use crate::generator::ResolvedTypes;
 use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
+use crate::model::Builtin;
 use crate::model::EnumLabel;
-use crate::model::FunctionInvocation;
 use crate::model::Instruction;
 use crate::model::Mapping;
-use crate::model::MappingSignature;
 use crate::model::Pair;
 use crate::model::StringConstructor;
 use crate::model::Type;
@@ -49,7 +48,7 @@ use std::iter::zip;
             ...
 */
 pub fn expand_mnemonics(
-    types: &ResolvedTypes,
+    types: &mut ResolvedTypes,
     assembly: &Mapping,
     sail: &Sail,
 ) -> crate::Result<Vec<Instruction>> {
@@ -58,9 +57,10 @@ pub fn expand_mnemonics(
     for Pair { lhs, rhs, cond } in &assembly.pairs {
         let constructor = lhs.as_fn_call()?;
         debug!("expanding {}", constructor.name);
+        debug!("{rhs:?}");
 
         if let Value::StringConcatenation(args) = rhs {
-            let (mnemonic, arguments) = split_at_function(args, "spc");
+            let (mnemonic, arguments) = split_at_space(args);
             let expanded = expand_functions(types, &mnemonic, sail)?;
             for item in expanded {
                 let lhs = rewrite(lhs, &|val: &Value| -> Option<Value> {
@@ -105,11 +105,10 @@ pub fn expand_mnemonics(
     Ok(result)
 }
 
-fn split_at_function(args: &[Value], fun: &str) -> (Vec<Value>, Vec<Value>) {
-    let index = args.iter().position(|val| match val {
-        Value::FunctionInvocation(FunctionInvocation { name, .. }) => name == fun,
-        _ => false,
-    });
+fn split_at_space(args: &[Value]) -> (Vec<Value>, Vec<Value>) {
+    let index = args
+        .iter()
+        .position(|val| matches!(val, Value::Builtin(Builtin::Space)));
 
     if let Some(index) = index {
         let before = args[..index].to_vec();
@@ -125,7 +124,7 @@ fn split_at_function(args: &[Value], fun: &str) -> (Vec<Value>, Vec<Value>) {
 }
 
 fn expand_functions(
-    types: &ResolvedTypes,
+    types: &mut ResolvedTypes,
     mnemonic: &[Value],
     sail: &Sail,
 ) -> crate::Result<Vec<Expanded>> {
@@ -135,22 +134,7 @@ fn expand_functions(
     let mut n = 1;
     for value in mnemonic {
         if let Ok(fun) = value.as_fn_call() {
-            // XXX: There's no support for structs referring other user-defined types
-            //      It as a mistake mixing parsing and resolving types in `parse_mapping`.
-            let xxx_hack = true;
-            let mapping = if xxx_hack {
-                let sig = sail.mapping_signature(&fun.name)?;
-                let new_lhs = types.resolve_idents(&sig.lhs, sail);
-                let new_rhs = types.resolve_idents(&sig.rhs, sail);
-                let new_sig = MappingSignature {
-                    lhs: new_lhs,
-                    rhs: new_rhs,
-                };
-
-                sail.mapping_with_known_signature(&fun.name, Some(new_sig))?
-            } else {
-                sail.mapping(&fun.name)?
-            };
+            let mapping = types.mapping(&fun.name, sail)?;
 
             if fun.args.len() != 1 {
                 return err!(
@@ -207,7 +191,7 @@ fn expand_functions(
                     }
                     Value::BinaryConcatenation(bc) => {
                         let bv = pair.lhs.as_bitvector()?;
-                        match match_bitconcatenation(&bv, bc) {
+                        match match_bitconcatenation(bv, bc) {
                             MatchResult::Err(err) => return Err(err),
                             MatchResult::NoMatch => {
                                 update = false;
@@ -276,11 +260,11 @@ impl MatchResult {
 fn match_bitconcatenation(v: &BitVector, c: &BinaryConcatenation) -> MatchResult {
     let Some(total_bit_width) = c.total_width() else {
         debug!("{c:?}");
-        return MatchResult::err(format!("binary concatenation has undefined width"));
+        return MatchResult::err(errfmt!("binary concatenation has undefined width"));
     };
 
     if total_bit_width != v.bit_width {
-        return MatchResult::err(format!(
+        return MatchResult::err(errfmt!(
             "bit width does not match {} != {total_bit_width}",
             v.bit_width
         ));

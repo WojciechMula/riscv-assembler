@@ -173,11 +173,7 @@ fn simplify_aux(v: &Value) -> Option<Value> {
         return None;
     }
 
-    let mut newargs: Vec<Value> = args
-        .iter()
-        .filter(|v| !v.is_unit())
-        .map(|v| v.clone())
-        .collect();
+    let mut newargs: Vec<Value> = args.iter().filter(|v| !v.is_unit()).cloned().collect();
 
     match newargs.len() {
         0 => Some(Value::Unit),

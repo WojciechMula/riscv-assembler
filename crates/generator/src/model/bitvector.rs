@@ -35,7 +35,7 @@ impl BitVector {
             }
         } else {
             let min = -(1_i64 << (bit_width - 1));
-            if val >= min as i64 {
+            if val >= min {
                 let mask = (1_u64 << bit_width) - 1;
                 let val = (val as u64) & mask;
                 Ok(Self { val, bit_width })

@@ -2,7 +2,6 @@ use crate::err;
 use crate::generator::code_generator::CodeGenerator;
 use crate::generator::csr::CsrList;
 use crate::generator::extensions::Extensions;
-use crate::generator::resolve_enums::ResolvedType;
 use crate::generator::resolve_enums::ResolvedTypes;
 use crate::generator::resolve_enums::resolve_bitvector_enums;
 use crate::generator::resolve_enums::resolve_enums;
@@ -20,6 +19,7 @@ use crate::model::Union;
 use crate::model::Value;
 use crate::sail::Sail;
 use crate::sail::patch::patch_assembly_definitions;
+use crate::sail::patch::replace_known_functions;
 use log::debug;
 use log::error;
 use log::info;
@@ -60,6 +60,11 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
         map_string.push(mapping);
     }
 
+    info!("Inserting builtin functions");
+    for mapping in map_string.iter_mut() {
+        replace_known_functions(mapping);
+    }
+
     info!("Resolving enums present in constructors");
     resolve_enums(&mut types, &signatures, &sail)?;
 
@@ -69,7 +74,7 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     info!("Collecting instruction mnemonics");
     let mut expanded = Vec::<Instruction>::new();
     for mapping in &map_string {
-        let tmp = expand_mnemonics::expand_mnemonics(&types, mapping, &sail)?;
+        let tmp = expand_mnemonics::expand_mnemonics(&mut types, mapping, &sail)?;
         expanded.extend(tmp);
     }
 
@@ -130,20 +135,16 @@ fn initialize(
     let mut instructions = sail.get_union(instruction_type)?;
     for typ in instructions.0.values_mut() {
         match typ {
-            Type::Ident(ident) => match types.resolve_identifier(ident, sail)? {
-                ResolvedType::Type(newtype) => {
-                    *typ = newtype;
+            Type::Ident(ident) => {
+                if let Some(new_type) = types.resolve_identifier(ident, sail)? {
+                    *typ = new_type;
                 }
-                _ => (),
-            },
+            }
             Type::Tuple(args) => {
                 for typ in args.iter_mut() {
                     if let Type::Ident(ident) = typ {
-                        match types.resolve_identifier(ident, sail)? {
-                            ResolvedType::Type(newtype) => {
-                                *typ = newtype;
-                            }
-                            _ => (),
+                        if let Some(new_type) = types.resolve_identifier(ident, sail)? {
+                            *typ = new_type;
                         }
                     }
                 }
@@ -305,7 +306,7 @@ fn fixup_argument(val: &mut Value, typ: &Type, sail: &Sail) {
 }
 
 fn match_opcodes(
-    expanded: &mut Vec<Instruction>,
+    expanded: &mut [Instruction],
     constructors: HashMap<String, Vec<Pair>>,
     signatures: &Union,
 ) -> crate::Result<()> {

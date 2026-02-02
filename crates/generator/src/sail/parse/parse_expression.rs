@@ -3,6 +3,7 @@ use super::parse_invocation;
 use super::parse_struct;
 use crate::err;
 use crate::model::BinaryConcatenation;
+use crate::model::Builtin;
 use crate::model::FunctionInvocation;
 use crate::model::Type;
 use crate::model::Value;
@@ -100,16 +101,13 @@ fn parse_single_expression(p: &mut Parser) -> crate::Result<Value> {
                 let lo = p.number()?;
                 p.expect(Token::CloseSquareParen)?;
 
-                let fun = FunctionInvocation {
-                    name: "asm::bitvector_subvector".to_string(),
-                    args: vec![
-                        Value::Symbol(ident),
-                        Value::Integer(hi.try_into()?),
-                        Value::Integer(lo.try_into()?),
-                    ],
+                let fun = Builtin::SubVector {
+                    binding: ident,
+                    lo: lo.try_into()?,
+                    hi: hi.try_into()?,
                 };
 
-                Ok(Value::FunctionInvocation(fun))
+                Ok(fun.into())
             } else if matches!(p.lookahead(1), Token::Unit) {
                 // matches "function()" -> [ident, unit]
                 p.consume();

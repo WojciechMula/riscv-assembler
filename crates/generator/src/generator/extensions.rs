@@ -27,7 +27,7 @@ impl Extensions {
     pub fn new(sail: &Sail) -> crate::Result<Self> {
         let enumeration = sail.get_enum(ENUM_NAME)?;
         let mut mappings = collect_mappings(sail, |signature| {
-            let Type::Enum(name) = &signature.lhs else {
+            let Type::Ident(name) = &signature.lhs else {
                 return false;
             };
 
@@ -38,8 +38,11 @@ impl Extensions {
             signature.rhs.is_string()
         });
 
-        if mappings.len() != 1 {
-            return err!("expected exactly one mapping {ENUM_NAME} <-> string");
+        let n = mappings.len();
+        if n != 1 {
+            return err!(
+                "expected exactly one mapping {ENUM_NAME} <-> string, found {n} mapping(s)"
+            );
         }
 
         let mapping = mappings.pop().unwrap();

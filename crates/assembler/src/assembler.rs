@@ -2696,6 +2696,16 @@ impl Extensions {
     }
 }
 #[allow(non_camel_case_types)]
+pub(crate) enum Signedness {
+    Signed,
+    Unsigned,
+}
+#[allow(non_camel_case_types)]
+pub(crate) enum VectorHalf {
+    High,
+    Low,
+}
+#[allow(non_camel_case_types)]
 pub(crate) enum amoop {
     AMOSWAP,
     AMOADD,
@@ -3857,7 +3867,7 @@ fn parse_lbu(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3870,7 +3880,7 @@ fn parse_lhu(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3883,7 +3893,7 @@ fn parse_lwu(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3896,7 +3906,7 @@ fn parse_ldu(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3909,7 +3919,7 @@ fn parse_lb(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3922,7 +3932,7 @@ fn parse_lh(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3935,7 +3945,7 @@ fn parse_lw(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -3948,7 +3958,7 @@ fn parse_ld(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let imm = optional_signed_12(parser)?;
+    let imm = parser.optional_signed::<12>()?;
     parser.expect("(")?;
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
@@ -19963,7 +19973,7 @@ fn parse_c_illegal(parser: &mut Parser) -> crate::Result<u32> {
 }
 fn parse_c_nop(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
-    let imm = maybe_nonzero_imm_6(parser)?;
+    let imm = parser.optional_unsigned_nonzero::<6>()?;
     encode_c_nop(imm)
 }
 fn parse_mv(parser: &mut Parser) -> crate::Result<u32> {
@@ -20799,12 +20809,12 @@ fn encode_store(
 ) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b0100011_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (width_enc(width).val << 8)
-        | (0b0_u32 << 10)
-        | (encdec_reg(rs1).val << 11)
-        | (encdec_reg(rs2).val << 16)
-        | ((imm.val >> 11) & 0b1))
+        | ((imm.val >> 0) & 0b11111)
+        | (width_enc(width).val << 12)
+        | (0b0_u32 << 14)
+        | (encdec_reg(rs1).val << 15)
+        | (encdec_reg(rs2).val << 20)
+        | ((imm.val >> 5) & 0b1111111))
 }
 fn encode_addiw(imm: BitVector<12>, rs1: regidx, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
@@ -21601,9 +21611,9 @@ fn encode_c_addi4spn(rd: cregidx, nzimm: BitVector<8>) -> crate::Result<u32> {
         | (encdec_creg(rd).val << 2)
         | ((nzimm.val >> 1) & 0b1)
         | ((nzimm.val >> 0) & 0b1)
-        | ((nzimm.val >> 7) & 0b1)
-        | ((nzimm.val >> 3) & 0b1)
-        | (0b000_u32 << 9))
+        | ((nzimm.val >> 4) & 0b1111)
+        | ((nzimm.val >> 2) & 0b11)
+        | (0b000_u32 << 13))
 }
 fn encode_c_lw(uimm: BitVector<5>, rs1: cregidx, rd: cregidx) -> crate::Result<u32> {
     // instruction assembling
@@ -21612,17 +21622,17 @@ fn encode_c_lw(uimm: BitVector<5>, rs1: cregidx, rd: cregidx) -> crate::Result<u
         | ((uimm.val >> 4) & 0b1)
         | ((uimm.val >> 0) & 0b1)
         | (encdec_creg(rs1).val << 7)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b010_u32 << 11))
+        | ((uimm.val >> 1) & 0b111)
+        | (0b010_u32 << 13))
 }
 fn encode_c_ld(uimm: BitVector<5>, rs1: cregidx, rd: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b00_u32 << 0)
         | (encdec_creg(rd).val << 2)
-        | ((uimm.val >> 4) & 0b1)
-        | (encdec_creg(rs1).val << 6)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b011_u32 << 10))
+        | ((uimm.val >> 3) & 0b11)
+        | (encdec_creg(rs1).val << 7)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b011_u32 << 13))
 }
 fn encode_c_sw(uimm: BitVector<5>, rs1: cregidx, rs2: cregidx) -> crate::Result<u32> {
     // instruction assembling
@@ -21631,100 +21641,100 @@ fn encode_c_sw(uimm: BitVector<5>, rs1: cregidx, rs2: cregidx) -> crate::Result<
         | ((uimm.val >> 4) & 0b1)
         | ((uimm.val >> 0) & 0b1)
         | (encdec_creg(rs1).val << 7)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b110_u32 << 11))
+        | ((uimm.val >> 1) & 0b111)
+        | (0b110_u32 << 13))
 }
 fn encode_c_sd(uimm: BitVector<5>, rs1: cregidx, rs2: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b00_u32 << 0)
         | (encdec_creg(rs2).val << 2)
-        | ((uimm.val >> 4) & 0b1)
-        | (encdec_creg(rs1).val << 6)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b111_u32 << 10))
+        | ((uimm.val >> 3) & 0b11)
+        | (encdec_creg(rs1).val << 7)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b111_u32 << 13))
 }
 fn encode_c_addi(imm: BitVector<6>, rsd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (encdec_reg(rsd).val << 3)
+        | ((imm.val >> 0) & 0b11111)
+        | (encdec_reg(rsd).val << 7)
         | ((imm.val >> 5) & 0b1)
-        | (0b000_u32 << 9))
+        | (0b000_u32 << 13))
 }
 fn encode_c_jal(imm: BitVector<11>) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
         | ((imm.val >> 4) & 0b1)
-        | ((imm.val >> 2) & 0b1)
+        | ((imm.val >> 0) & 0b111)
         | ((imm.val >> 6) & 0b1)
         | ((imm.val >> 5) & 0b1)
         | ((imm.val >> 9) & 0b1)
-        | ((imm.val >> 8) & 0b1)
+        | ((imm.val >> 7) & 0b11)
         | ((imm.val >> 3) & 0b1)
         | ((imm.val >> 10) & 0b1)
-        | (0b001_u32 << 10))
+        | (0b001_u32 << 13))
 }
 fn encode_c_addiw(imm: BitVector<6>, rsd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (encdec_reg(rsd).val << 3)
+        | ((imm.val >> 0) & 0b11111)
+        | (encdec_reg(rsd).val << 7)
         | ((imm.val >> 5) & 0b1)
-        | (0b001_u32 << 9))
+        | (0b001_u32 << 13))
 }
 fn encode_c_li(imm: BitVector<6>, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (encdec_reg(rd).val << 3)
+        | ((imm.val >> 0) & 0b11111)
+        | (encdec_reg(rd).val << 7)
         | ((imm.val >> 5) & 0b1)
-        | (0b010_u32 << 9))
+        | (0b010_u32 << 13))
 }
 fn encode_c_addi16sp(nzimm: BitVector<6>) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
         | ((nzimm.val >> 1) & 0b1)
-        | ((nzimm.val >> 4) & 0b1)
+        | ((nzimm.val >> 3) & 0b11)
         | ((nzimm.val >> 2) & 0b1)
         | ((nzimm.val >> 0) & 0b1)
-        | (0b00010_u32 << 6)
+        | (0b00010_u32 << 7)
         | ((nzimm.val >> 5) & 0b1)
-        | (0b011_u32 << 12))
+        | (0b011_u32 << 13))
 }
 fn encode_c_lui(imm: BitVector<6>, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (encdec_reg(rd).val << 3)
+        | ((imm.val >> 0) & 0b11111)
+        | (encdec_reg(rd).val << 7)
         | ((imm.val >> 5) & 0b1)
-        | (0b011_u32 << 9))
+        | (0b011_u32 << 13))
 }
 fn encode_c_srli(shamt: BitVector<6>, rsd: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((shamt.val >> 4) & 0b1)
-        | (encdec_creg(rsd).val << 3)
-        | (0b00_u32 << 6)
+        | ((shamt.val >> 0) & 0b11111)
+        | (encdec_creg(rsd).val << 7)
+        | (0b00_u32 << 10)
         | ((shamt.val >> 5) & 0b1)
-        | (0b100_u32 << 9))
+        | (0b100_u32 << 13))
 }
 fn encode_c_srai(shamt: BitVector<6>, rsd: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((shamt.val >> 4) & 0b1)
-        | (encdec_creg(rsd).val << 3)
-        | (0b01_u32 << 6)
+        | ((shamt.val >> 0) & 0b11111)
+        | (encdec_creg(rsd).val << 7)
+        | (0b01_u32 << 10)
         | ((shamt.val >> 5) & 0b1)
-        | (0b100_u32 << 9))
+        | (0b100_u32 << 13))
 }
 fn encode_c_andi(imm: BitVector<6>, rsd: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (encdec_creg(rsd).val << 3)
-        | (0b10_u32 << 6)
+        | ((imm.val >> 0) & 0b11111)
+        | (encdec_creg(rsd).val << 7)
+        | (0b10_u32 << 10)
         | ((imm.val >> 5) & 0b1)
-        | (0b100_u32 << 9))
+        | (0b100_u32 << 13))
 }
 fn encode_c_sub(rsd: cregidx, rs2: cregidx) -> crate::Result<u32> {
     // instruction assembling
@@ -21790,78 +21800,78 @@ fn encode_c_j(imm: BitVector<11>) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
         | ((imm.val >> 4) & 0b1)
-        | ((imm.val >> 2) & 0b1)
+        | ((imm.val >> 0) & 0b111)
         | ((imm.val >> 6) & 0b1)
         | ((imm.val >> 5) & 0b1)
         | ((imm.val >> 9) & 0b1)
-        | ((imm.val >> 8) & 0b1)
+        | ((imm.val >> 7) & 0b11)
         | ((imm.val >> 3) & 0b1)
         | ((imm.val >> 10) & 0b1)
-        | (0b101_u32 << 10))
+        | (0b101_u32 << 13))
 }
 fn encode_c_beqz(imm: BitVector<8>, rs: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
         | ((imm.val >> 4) & 0b1)
-        | ((imm.val >> 1) & 0b1)
-        | ((imm.val >> 6) & 0b1)
-        | (encdec_creg(rs).val << 5)
-        | ((imm.val >> 3) & 0b1)
+        | ((imm.val >> 0) & 0b11)
+        | ((imm.val >> 5) & 0b11)
+        | (encdec_creg(rs).val << 7)
+        | ((imm.val >> 2) & 0b11)
         | ((imm.val >> 7) & 0b1)
-        | (0b110_u32 << 10))
+        | (0b110_u32 << 13))
 }
 fn encode_c_bnez(imm: BitVector<8>, rs: cregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
         | ((imm.val >> 4) & 0b1)
-        | ((imm.val >> 1) & 0b1)
-        | ((imm.val >> 6) & 0b1)
-        | (encdec_creg(rs).val << 5)
-        | ((imm.val >> 3) & 0b1)
+        | ((imm.val >> 0) & 0b11)
+        | ((imm.val >> 5) & 0b11)
+        | (encdec_creg(rs).val << 7)
+        | ((imm.val >> 2) & 0b11)
         | ((imm.val >> 7) & 0b1)
-        | (0b111_u32 << 10))
+        | (0b111_u32 << 13))
 }
 fn encode_c_slli(shamt: BitVector<6>, rsd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
-        | ((shamt.val >> 4) & 0b1)
-        | (encdec_reg(rsd).val << 3)
+        | ((shamt.val >> 0) & 0b11111)
+        | (encdec_reg(rsd).val << 7)
         | ((shamt.val >> 5) & 0b1)
-        | (0b000_u32 << 9))
+        | (0b000_u32 << 13))
 }
 fn encode_c_lwsp(uimm: BitVector<6>, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 2) & 0b1)
-        | (encdec_reg(rd).val << 4)
+        | ((uimm.val >> 4) & 0b11)
+        | ((uimm.val >> 0) & 0b111)
+        | (encdec_reg(rd).val << 7)
         | ((uimm.val >> 3) & 0b1)
-        | (0b010_u32 << 10))
+        | (0b010_u32 << 13))
 }
 fn encode_c_ldsp(uimm: BitVector<6>, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 1) & 0b1)
-        | (encdec_reg(rd).val << 4)
+        | ((uimm.val >> 3) & 0b111)
+        | ((uimm.val >> 0) & 0b11)
+        | (encdec_reg(rd).val << 7)
         | ((uimm.val >> 2) & 0b1)
-        | (0b011_u32 << 10))
+        | (0b011_u32 << 13))
 }
 fn encode_c_swsp(uimm: BitVector<6>, rs2: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
         | (encdec_reg(rs2).val << 2)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b110_u32 << 9))
+        | ((uimm.val >> 4) & 0b11)
+        | ((uimm.val >> 0) & 0b1111)
+        | (0b110_u32 << 13))
 }
 fn encode_c_sdsp(uimm: BitVector<6>, rs2: regidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
         | (encdec_reg(rs2).val << 2)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b111_u32 << 9))
+        | ((uimm.val >> 3) & 0b111)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b111_u32 << 13))
 }
 fn encode_c_jr(rs1: regidx) -> crate::Result<u32> {
     // instruction assembling
@@ -22055,12 +22065,12 @@ fn encode_store_fp(
 ) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b0100111_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (width_enc(width).val << 8)
-        | (0b0_u32 << 10)
-        | (encdec_reg(rs1).val << 11)
-        | (encdec_freg(rs2).val << 16)
-        | ((imm.val >> 11) & 0b1))
+        | ((imm.val >> 0) & 0b11111)
+        | (width_enc(width).val << 12)
+        | (0b0_u32 << 14)
+        | (encdec_reg(rs1).val << 15)
+        | (encdec_freg(rs2).val << 20)
+        | ((imm.val >> 5) & 0b1111111))
 }
 fn encode_f_madd_type_s(
     rs3: fregidx,
@@ -22495,19 +22505,19 @@ fn encode_f_un_type_f_s(rs1: regidx, rd: fregidx, arg2: f_un_op_f_S) -> crate::R
 fn encode_c_flwsp(uimm: BitVector<6>, rd: fregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 2) & 0b1)
-        | (encdec_freg(rd).val << 4)
+        | ((uimm.val >> 4) & 0b11)
+        | ((uimm.val >> 0) & 0b111)
+        | (encdec_freg(rd).val << 7)
         | ((uimm.val >> 3) & 0b1)
-        | (0b011_u32 << 10))
+        | (0b011_u32 << 13))
 }
 fn encode_c_fswsp(uimm: BitVector<6>, rs2: fregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
         | (encdec_freg(rs2).val << 2)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b111_u32 << 9))
+        | ((uimm.val >> 4) & 0b11)
+        | ((uimm.val >> 0) & 0b1111)
+        | (0b111_u32 << 13))
 }
 fn encode_c_flw(uimm: BitVector<5>, rs1: cregidx, rd: cfregidx) -> crate::Result<u32> {
     // instruction assembling
@@ -22516,8 +22526,8 @@ fn encode_c_flw(uimm: BitVector<5>, rs1: cregidx, rd: cfregidx) -> crate::Result
         | ((uimm.val >> 4) & 0b1)
         | ((uimm.val >> 0) & 0b1)
         | (encdec_creg(rs1).val << 7)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b011_u32 << 11))
+        | ((uimm.val >> 1) & 0b111)
+        | (0b011_u32 << 13))
 }
 fn encode_c_fsw(uimm: BitVector<5>, rs1: cregidx, rs2: cfregidx) -> crate::Result<u32> {
     // instruction assembling
@@ -22526,8 +22536,8 @@ fn encode_c_fsw(uimm: BitVector<5>, rs1: cregidx, rs2: cfregidx) -> crate::Resul
         | ((uimm.val >> 4) & 0b1)
         | ((uimm.val >> 0) & 0b1)
         | (encdec_creg(rs1).val << 7)
-        | ((uimm.val >> 3) & 0b1)
-        | (0b111_u32 << 11))
+        | ((uimm.val >> 1) & 0b111)
+        | (0b111_u32 << 13))
 }
 fn encode_f_madd_type_d(
     rs3: fregidx,
@@ -22998,37 +23008,37 @@ fn encode_f_un_f_type_d(rs1: regidx, rd: fregidx, arg2: f_un_f_op_D) -> crate::R
 fn encode_c_fldsp(uimm: BitVector<6>, rd: fregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 1) & 0b1)
-        | (encdec_freg(rd).val << 4)
+        | ((uimm.val >> 3) & 0b111)
+        | ((uimm.val >> 0) & 0b11)
+        | (encdec_freg(rd).val << 7)
         | ((uimm.val >> 2) & 0b1)
-        | (0b001_u32 << 10))
+        | (0b001_u32 << 13))
 }
 fn encode_c_fsdsp(uimm: BitVector<6>, rs2: fregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b10_u32 << 0)
         | (encdec_freg(rs2).val << 2)
-        | ((uimm.val >> 5) & 0b1)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b101_u32 << 9))
+        | ((uimm.val >> 3) & 0b111)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b101_u32 << 13))
 }
 fn encode_c_fld(uimm: BitVector<5>, rs1: cregidx, rd: cfregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b00_u32 << 0)
         | (encdec_cfreg(rd).val << 2)
-        | ((uimm.val >> 4) & 0b1)
-        | (encdec_creg(rs1).val << 6)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b001_u32 << 10))
+        | ((uimm.val >> 3) & 0b11)
+        | (encdec_creg(rs1).val << 7)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b001_u32 << 13))
 }
 fn encode_c_fsd(uimm: BitVector<5>, rs1: cregidx, rs2: cfregidx) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b00_u32 << 0)
         | (encdec_cfreg(rs2).val << 2)
-        | ((uimm.val >> 4) & 0b1)
-        | (encdec_creg(rs1).val << 6)
-        | ((uimm.val >> 2) & 0b1)
-        | (0b101_u32 << 10))
+        | ((uimm.val >> 3) & 0b11)
+        | (encdec_creg(rs1).val << 7)
+        | ((uimm.val >> 0) & 0b111)
+        | (0b101_u32 << 13))
 }
 fn encode_f_bin_rm_type_h(
     rs2: fregidx,
@@ -25540,11 +25550,11 @@ fn encode_vror_vi(
     Ok((0b1010111_u32 << 0)
         | (encdec_vreg(vd).val << 7)
         | (0b011_u32 << 12)
-        | ((uimm.val >> 4) & 0b1)
-        | (encdec_vreg(vs2).val << 16)
-        | (vm.val << 21)
+        | ((uimm.val >> 0) & 0b11111)
+        | (encdec_vreg(vs2).val << 20)
+        | (vm.val << 25)
         | ((uimm.val >> 5) & 0b1)
-        | (0b01010_u32 << 23))
+        | (0b01010_u32 << 27))
 }
 fn encode_vwsll_vv(
     vm: BitVector<1>,
@@ -26024,8 +26034,8 @@ fn encode_c_illegal(s: BitVector<16>) -> crate::Result<u32> {
 fn encode_c_nop(imm: BitVector<6>) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b01_u32 << 0)
-        | ((imm.val >> 4) & 0b1)
-        | (0b00000_u32 << 3)
+        | ((imm.val >> 0) & 0b11111)
+        | (0b00000_u32 << 7)
         | ((imm.val >> 5) & 0b1)
-        | (0b000_u32 << 9))
+        | (0b000_u32 << 13))
 }

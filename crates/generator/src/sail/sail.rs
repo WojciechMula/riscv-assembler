@@ -7,7 +7,6 @@ use crate::model::ExpandMapping;
 use crate::model::Mapping;
 use crate::model::MappingSignature;
 use crate::model::StructSignature;
-use crate::model::Type;
 use crate::model::Union;
 use log::error;
 use logos::Logos;
@@ -132,36 +131,19 @@ impl Sail {
     }
 
     pub fn mapping(&self, name: &str) -> crate::Result<Mapping> {
-        self.mapping_aux(name, ExpandMapping::BitVector, None)
-    }
-
-    pub fn mapping_with_known_signature(
-        &self,
-        name: &str,
-        custom_signature: Option<MappingSignature>,
-    ) -> crate::Result<Mapping> {
-        self.mapping_aux(name, ExpandMapping::BitVector, custom_signature)
+        self.mapping_aux(name, ExpandMapping::BitVector)
     }
 
     pub fn mapping_raw(&self, name: &str) -> crate::Result<Mapping> {
-        self.mapping_aux(name, ExpandMapping::None, None)
+        self.mapping_aux(name, ExpandMapping::None)
     }
 
-    fn mapping_aux(
-        &self,
-        name: &str,
-        exp: ExpandMapping,
-        mut custom_signature: Option<MappingSignature>,
-    ) -> crate::Result<Mapping> {
+    fn mapping_aux(&self, name: &str, exp: ExpandMapping) -> crate::Result<Mapping> {
         let Some(offset) = self.mappings.get(name) else {
             return err!("mapping `{name}` not found");
         };
 
-        let sig = if custom_signature.is_some() {
-            custom_signature.take().unwrap()
-        } else {
-            self.mapping_signature(name)?
-        };
+        let sig = self.mapping_signature(name)?;
 
         let mut p = self.parser(*offset);
 
@@ -198,31 +180,9 @@ impl Sail {
         let mut p = self.parser(*offset);
 
         match MappingSignature::parse(&mut p) {
-            Ok(sig) => {
-                let lhs = self.lookup_type(&sig.lhs);
-                let rhs = self.lookup_type(&sig.rhs);
-
-                Ok(MappingSignature { lhs, rhs })
-            }
+            Ok(sig) => Ok(sig),
             Err(err) => Err(self.error(&p, err.to_string())),
         }
-    }
-
-    fn lookup_type(&self, typ: &Type) -> Type {
-        if let Type::Ident(name) = typ {
-            if self.mappings.contains_key(name) {
-                return Type::Mapping(name.clone());
-            }
-            if self.enums.contains_key(name) {
-                return Type::Enum(name.clone());
-            }
-            if self.structs.contains_key(name) {
-                let structure = self.get_struct(name).unwrap();
-                return Type::Struct(structure);
-            }
-        }
-
-        typ.clone()
     }
 
     pub fn what_is(&self, name: &str) -> IdentifierKind {

@@ -168,6 +168,14 @@ impl<'a> Parser<'a> {
             }
         }
     }
+
+    pub fn optional_signed<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
+        todo!();
+    }
+
+    pub fn optional_unsigned_nonzero<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
+        todo!();
+    }
 }
 
 pub fn parse_u64(s: &str) -> Result<u64, String> {

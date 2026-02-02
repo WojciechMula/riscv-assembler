@@ -1,6 +1,7 @@
 use crate::err;
 use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
+use crate::model::Builtin;
 use crate::model::EnumLabel;
 use crate::model::FunctionInvocation;
 use crate::model::Struct;
@@ -19,6 +20,7 @@ pub enum Value {
     StringConcatenation(Vec<Value>),
     BinaryConcatenation(BinaryConcatenation),
     FunctionInvocation(FunctionInvocation),
+    Builtin(Builtin),
     Tuple(Vec<Value>),
     Struct(Struct),
 }
@@ -90,6 +92,7 @@ impl Value {
             Self::Unit => "unit",
             Self::String(..) => "string",
             Self::BitVector(..) => "bitvector",
+            Self::Builtin(..) => "builtin",
             Self::Integer(..) => "integer",
             Self::Boolean(..) => "bool",
             Self::EnumLabel(..) => "enum label",

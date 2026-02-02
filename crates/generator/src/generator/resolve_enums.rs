@@ -1,5 +1,4 @@
 use crate::err;
-use crate::is_custom_function;
 use crate::model::BitVector;
 use crate::model::FunctionInvocation;
 use crate::model::Instruction;
@@ -37,52 +36,55 @@ pub struct ResolvedEnumItem {
     pub string: String,
 }
 
-pub enum ResolvedType {
-    None,
-    Overriden,
-    Type(Type),
-    Struct(String),
-}
-
 impl ResolvedTypes {
-    pub fn resolve_identifier(&mut self, name: &str, sail: &Sail) -> crate::Result<ResolvedType> {
+    pub fn resolve_identifier(&mut self, name: &str, sail: &Sail) -> crate::Result<Option<Type>> {
         if is_type_overriden(name) {
-            return Ok(ResolvedType::Overriden);
+            return Ok(None);
         }
 
         if self.enums.contains_key(name) {
-            return Ok(ResolvedType::Type(Type::Enum(name.to_string())));
+            return Ok(Some(Type::Enum(name.to_string())));
         }
         if self.structs.contains_key(name) {
-            return Ok(ResolvedType::Struct(name.to_string()));
+            return Ok(Some(Type::Struct(name.to_string())));
         }
         if self.mappings.contains_key(name) {
-            return Ok(ResolvedType::Type(Type::Mapping(name.to_string())));
+            return Ok(Some(Type::Mapping(name.to_string())));
         }
 
         match sail.what_is(name) {
             IdentifierKind::Mapping => {
-                let v = sail.mapping(name)?;
-                self.mappings.insert(name.to_string(), v);
+                let _ = self.mapping(name, sail)?;
 
-                Ok(ResolvedType::Type(Type::Mapping(name.to_string())))
+                Ok(Some(Type::Mapping(name.to_string())))
             }
             IdentifierKind::Struct => {
-                let val = sail.get_struct(name)?;
-                self.structs.insert(name.to_string(), val);
+                let mut struct_type = sail.get_struct(name)?;
+                for typ in struct_type.fields.values_mut() {
+                    match typ {
+                        Type::Ident(ident) => {
+                            if let Some(new_type) = self.resolve_identifier(ident, sail)? {
+                                *typ = new_type;
+                            }
+                        }
+                        _ => todo!("{typ:?}"),
+                    }
+                }
 
-                Ok(ResolvedType::Struct(name.to_string()))
+                self.structs.insert(name.to_string(), struct_type);
+
+                Ok(Some(Type::Struct(name.to_string())))
             }
             IdentifierKind::Enum => {
                 let val = sail.get_enum(name)?;
 
-                let mut resolved = ResolvedEnum::new(&name);
+                let mut resolved = ResolvedEnum::new(name);
                 for label in val.labels {
                     resolved.items.push(ResolvedEnumItem::new(label));
                 }
                 self.enums.insert(name.to_string(), resolved);
 
-                Ok(ResolvedType::Type(Type::Enum(name.to_string())))
+                Ok(Some(Type::Enum(name.to_string())))
             }
             IdentifierKind::Other => {
                 err!("type {name} cannot be identified")
@@ -90,43 +92,30 @@ impl ResolvedTypes {
         }
     }
 
-    pub fn resolve_idents(&self, typ: &Type, sail: &Sail) -> Type {
+    pub fn resolve_types(&mut self, typ: &Type, sail: &Sail) -> crate::Result<Type> {
         match typ {
-            Type::Enum(_) | Type::String | Type::Set(..) | Type::Boolean | Type::BitVector(..) => {
-                typ.clone()
-            }
-            Type::Ident(ident) => {
-                if self.enums.contains_key(ident) {
-                    Type::Enum(ident.clone())
-                } else if sail.what_is(ident) == IdentifierKind::Enum {
-                    Type::Enum(ident.clone())
-                } else {
-                    typ.clone()
-                }
-            }
+            Type::Ident(ident) => match self.resolve_identifier(ident, sail)? {
+                Some(new_typ) => Ok(new_typ),
+                None => Ok(typ.clone()),
+            },
             Type::Tuple(types) => {
-                let mut new = Vec::<Type>::with_capacity(types.len());
+                let mut new_types = Vec::<Type>::with_capacity(types.len());
                 for typ in types {
-                    new.push(self.resolve_idents(typ, sail));
+                    new_types.push(self.resolve_types(typ, sail)?);
                 }
 
-                Type::Tuple(new)
+                Ok(Type::Tuple(new_types))
             }
-            Type::Struct(struct_type) => {
-                let mut struct_type = struct_type.clone();
-                for typ in struct_type.fields.values_mut() {
-                    *typ = self.resolve_idents(typ, sail);
-                }
-
-                Type::Struct(struct_type)
-            }
+            Type::String | Type::Boolean | Type::BitVector(_) | Type::Set(_) => Ok(typ.clone()),
             _ => todo!("{typ:?}"),
         }
     }
 
     pub fn mapping(&mut self, name: &str, sail: &Sail) -> crate::Result<&Mapping> {
         if !self.mappings.contains_key(name) {
-            let mapping = sail.mapping(name)?;
+            let mut mapping = sail.mapping(name)?;
+            mapping.signature.lhs = self.resolve_types(&mapping.signature.lhs, sail)?;
+            mapping.signature.rhs = self.resolve_types(&mapping.signature.rhs, sail)?;
             self.mappings.insert(name.to_string(), mapping);
         }
 
@@ -145,13 +134,13 @@ pub fn resolve_enums(
         match signature {
             Type::Tuple(types) => {
                 for typ in types {
-                    if let Some(name) = resolve_type(typ) {
+                    if let Some(name) = type_name(typ) {
                         names.insert(name.clone());
                     };
                 }
             }
             _ => {
-                if let Some(name) = resolve_type(signature) {
+                if let Some(name) = type_name(signature) {
                     names.insert(name.clone());
                 }
             }
@@ -178,12 +167,10 @@ pub fn resolve_enums(
     Ok(())
 }
 
-pub type EnumName = String;
-
-pub fn resolve_type(typ: &Type) -> Option<EnumName> {
+pub fn type_name(typ: &Type) -> Option<String> {
     match typ {
         Type::BitVector(_) | Type::Boolean | Type::Unit | Type::Set(_) => None,
-        Type::Ident(name) | Type::Enum(name) => {
+        Type::Ident(name) | Type::Enum(name) | Type::Struct(name) => {
             if is_type_overriden(name) {
                 None
             } else {
@@ -231,10 +218,6 @@ pub fn resolve_string_enums(
             };
 
             if !seen.insert(mapping_name.clone()) {
-                continue;
-            }
-
-            if is_custom_function(mapping_name) {
                 continue;
             }
 
@@ -298,10 +281,6 @@ pub fn resolve_bitvector_enums(
                     };
 
                     if !seen.insert(mapping_name.clone()) {
-                        continue;
-                    }
-
-                    if is_custom_function(mapping_name) {
                         continue;
                     }
 

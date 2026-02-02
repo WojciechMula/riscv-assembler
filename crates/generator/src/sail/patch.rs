@@ -1,11 +1,39 @@
+use crate::model::Builtin;
 use crate::model::FunctionInvocation;
 use crate::model::Mapping;
 use crate::model::Pair;
 use crate::model::Value;
+use crate::model::rewrite;
 
 pub fn patch_assembly_definitions(mapping: &mut Mapping) {
     patch_c_nop(mapping);
     patch_load(mapping);
+}
+
+pub fn replace_known_functions(mapping: &mut Mapping) {
+    for Pair { rhs, .. } in mapping.pairs.iter_mut() {
+        *rhs = rewrite(rhs, &replace_known_functions_aux);
+    }
+}
+
+fn replace_known_functions_aux(v: &Value) -> Option<Value> {
+    let Value::FunctionInvocation(fun) = v else {
+        return None;
+    };
+
+    let res = match (fun.name.as_str(), fun.args.len()) {
+        ("sep", 0) => Some(Builtin::Separator),
+        ("opt_spc", 0) => Some(Builtin::OptionalSpace),
+        ("spc", 0) => Some(Builtin::Space),
+        ("sp_reg_name", 0) => Some(Builtin::StackPointer),
+        ("csr_name_map", 1) => {
+            let binding = fun.args[0].as_symbol().unwrap().to_string();
+            Some(Builtin::CsrName { binding })
+        }
+        _ => None,
+    };
+
+    res.map(|v| v.into())
 }
 
 fn patch_c_nop(mapping: &mut Mapping) {
@@ -40,11 +68,16 @@ fn patch_c_nop(mapping: &mut Mapping) {
     }
 
     let lhs = mk_fun("C_NOP", vec![var.clone()]);
+    let binding = var.as_symbol().expect("expected symbol");
 
     let rhs = Value::StringConcatenation(vec![
         Value::String("c.nop".to_string()),
-        mk_fun("spc", vec![]),
-        mk_fun("maybe_nonzero_imm_6", vec![var.clone()]),
+        Builtin::Space.into(),
+        Builtin::MaybeNonzero {
+            k: 6,
+            binding: binding.clone(),
+        }
+        .into(),
     ]);
 
     mapping.pairs.push(Pair {
@@ -83,7 +116,14 @@ fn patch_load(mapping: &mut Mapping) {
         unreachable!();
     };
 
-    fun.name = "optional_signed_12".to_string();
+    assert_eq!(fun.args.len(), 1);
+    let arg = fun.args[0].as_symbol().expect("expected symbol");
+
+    args[pos] = Builtin::OptionalSigned {
+        k: 12,
+        binding: arg.clone(),
+    }
+    .into();
 }
 
 fn is_function(v: &Value, name: &str) -> bool {

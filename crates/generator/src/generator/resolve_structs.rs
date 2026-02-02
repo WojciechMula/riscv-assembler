@@ -1,5 +1,5 @@
 use crate::generator::ResolvedTypes;
-use crate::generator::resolve_enums::resolve_type;
+use crate::generator::resolve_enums::type_name;
 use crate::model::Type;
 use crate::model::Union;
 use crate::sail::IdentifierKind;
@@ -18,13 +18,13 @@ pub fn resolve_structs(
         match signature {
             Type::Tuple(types) => {
                 for typ in types {
-                    if let Some(name) = resolve_type(typ) {
+                    if let Some(name) = type_name(typ) {
                         names.insert(name.clone());
                     };
                 }
             }
             _ => {
-                if let Some(name) = resolve_type(signature) {
+                if let Some(name) = type_name(signature) {
                     names.insert(name.clone());
                 }
             }

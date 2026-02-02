@@ -47,6 +47,7 @@ pub fn rewrite(value: &Value, callback: &dyn Fn(&Value) -> Option<Value>) -> Val
         | Value::Integer(..)
         | Value::EnumLabel(..)
         | Value::Boolean(..)
+        | Value::Builtin(..)
         | Value::Symbol(..) => callback(value).unwrap_or_else(|| value.clone()),
         Value::StringConcatenation(args) => {
             let newval = Value::StringConcatenation(rewrite_list(args, callback));
@@ -87,10 +88,10 @@ pub fn rewrite(value: &Value, callback: &dyn Fn(&Value) -> Option<Value>) -> Val
 
             callback(&newval).unwrap_or(newval)
         }
-        Value::Cast(val, _) => {
+        Value::Cast(val, typ) => {
             let newval = rewrite(val, callback);
 
-            callback(&newval).unwrap_or(newval)
+            Value::Cast(Box::new(callback(&newval).unwrap_or(newval)), typ.clone())
         }
     }
 }

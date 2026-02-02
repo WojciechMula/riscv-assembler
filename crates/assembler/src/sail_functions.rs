@@ -1,6 +1,9 @@
-use crate::LabelResolverTrait;
+// Sail types
 use crate::assembler::mul_op;
 use crate::assembler::rounding_mode;
+//
+
+use crate::LabelResolverTrait;
 use crate::bitvector::BitVector;
 use crate::err;
 use crate::parser::Parser;
@@ -321,8 +324,14 @@ pub fn vreg_name(parser: &mut Parser) -> crate::Result<vregidx> {
     }
 }
 
-pub fn sp_reg_name(_parse: &mut Parser) -> crate::Result<vregidx> {
-    todo!();
+pub fn sp_reg_name(parser: &mut Parser) -> crate::Result<()> {
+    let reg = reg_name(parser)?;
+
+    if reg != sp {
+        return err!("expected stack pointer (sp or x2)");
+    }
+
+    Ok(());
 }
 
 pub fn freg_or_reg_name(_parse: &mut Parser) -> crate::Result<fregidx> {
