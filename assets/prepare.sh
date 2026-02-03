@@ -21,4 +21,4 @@ eval $(opam env)
 sail --project ${RISCV_SAIL}/model/riscv.sail_project \
      --all-modules \
      --output-sail \
-     --config ${config}
+     --config ${config} > dump.sail

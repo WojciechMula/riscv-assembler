@@ -12,6 +12,7 @@ pub struct TypesRepository {
     pub enums: BTreeMap<String, ResolvedEnum>,
     pub structs: BTreeMap<String, StructSignature>,
     pub mappings: BTreeMap<String, Mapping>,
+    pub aliases: BTreeMap<String, Type>,
 }
 
 #[derive(Default, Debug)]
@@ -43,6 +44,9 @@ impl TypesRepository {
         }
         if self.mappings.contains_key(name) {
             return Ok(Some(Type::Mapping(name.to_string())));
+        }
+        if let Some(typ) = self.aliases.get(name) {
+            return Ok(Some(typ.clone()));
         }
 
         match sail.what_is(name) {
@@ -78,6 +82,13 @@ impl TypesRepository {
                 self.enums.insert(name.to_string(), resolved);
 
                 Ok(Some(Type::Enum(name.to_string())))
+            }
+            IdentifierKind::Alias => {
+                let typ = sail.get_alias(name)?;
+
+                self.aliases.insert(name.to_string(), typ.clone());
+
+                Ok(Some(typ))
             }
             IdentifierKind::Other => {
                 err!("type {name} cannot be identified")

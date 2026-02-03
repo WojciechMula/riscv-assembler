@@ -51,7 +51,7 @@ pub fn resolve_enums(
                 }
                 types.enums.insert(name.clone(), resolved);
             }
-            IdentifierKind::Struct => {}
+            IdentifierKind::Struct | IdentifierKind::Alias => {}
             _ => panic!("type `{name}` cannot be identified"),
         }
     }

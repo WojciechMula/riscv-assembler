@@ -34,7 +34,7 @@ pub fn resolve_structs(
     for name in names {
         debug!("struct `{name}`");
         match sail.what_is(&name) {
-            IdentifierKind::Enum => {}
+            IdentifierKind::Enum | IdentifierKind::Alias => {}
             IdentifierKind::Struct => {
                 let val = sail.get_struct(&name)?;
                 types.structs.insert(name.clone(), val);

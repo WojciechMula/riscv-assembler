@@ -7,6 +7,7 @@ use crate::model::ExpandMapping;
 use crate::model::Mapping;
 use crate::model::MappingSignature;
 use crate::model::StructSignature;
+use crate::model::Type;
 use crate::model::Union;
 use log::error;
 use logos::Logos;
@@ -22,6 +23,7 @@ pub struct Sail {
     pub enums: BTreeMap<String, usize>,
     pub unions: BTreeMap<String, usize>,
     pub structs: BTreeMap<String, usize>,
+    pub aliases: BTreeMap<String, usize>,
 }
 
 impl Sail {
@@ -76,6 +78,9 @@ impl Sail {
                             res.structs.insert(ident.clone(), res.tokens.len());
                         }
                     }
+                    Token::Type => {
+                        res.aliases.insert(ident.clone(), res.tokens.len());
+                    }
                     _ => (),
                 }
             }
@@ -125,6 +130,19 @@ impl Sail {
         let mut p = self.parser(*offset);
 
         match Union::parse(&mut p) {
+            Ok(v) => Ok(v),
+            Err(err) => Err(self.error(&p, err.to_string())),
+        }
+    }
+
+    pub fn get_alias(&self, name: &str) -> crate::Result<Type> {
+        let Some(offset) = self.aliases.get(name) else {
+            return err!("alias `{name}` not found");
+        };
+
+        let mut p = self.parser(*offset);
+
+        match Type::parse(&mut p) {
             Ok(v) => Ok(v),
             Err(err) => Err(self.error(&p, err.to_string())),
         }
@@ -198,6 +216,10 @@ impl Sail {
             return IdentifierKind::Struct;
         }
 
+        if self.aliases.contains_key(name) {
+            return IdentifierKind::Alias;
+        }
+
         IdentifierKind::Other
     }
 }
@@ -207,6 +229,7 @@ pub enum IdentifierKind {
     Mapping,
     Enum,
     Struct,
+    Alias,
     Other,
 }
 
