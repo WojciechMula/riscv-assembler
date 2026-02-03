@@ -1,8 +1,8 @@
+use crate::TypesRepository;
 use crate::err;
 use crate::generator::code_generator::CodeGenerator;
 use crate::generator::csr::CsrList;
 use crate::generator::extensions::Extensions;
-use crate::generator::resolve_enums::ResolvedTypes;
 use crate::generator::resolve_enums::resolve_bitvector_enums;
 use crate::generator::resolve_enums::resolve_enums;
 use crate::generator::resolve_enums::resolve_string_enums;
@@ -41,7 +41,7 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     let contents = std::fs::read_to_string(input)?;
 
     let mut sail = Sail::new(contents);
-    let mut types = ResolvedTypes::default();
+    let mut types = TypesRepository::default();
 
     let (signatures, mut map_string, map_binary) = initialize(&mut sail, &mut types)?;
 
@@ -128,7 +128,7 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
 
 fn initialize(
     sail: &mut Sail,
-    types: &mut ResolvedTypes,
+    types: &mut TypesRepository,
 ) -> crate::Result<(Union, Vec<Mapping>, Vec<Mapping>)> {
     let instruction_type = "instruction";
     info!("Looking for `{instruction_type}` union");

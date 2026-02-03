@@ -2,12 +2,11 @@ use crate::err;
 use crate::errfmt;
 use crate::generator::Extensions;
 use crate::generator::Instruction;
-use crate::generator::ResolvedTypes;
+use crate::generator::TypesRepository;
 use crate::generator::csr::CsrList;
 use crate::generator::resolve_conditions::resolve_arch_condition;
 use crate::generator::resolve_conditions::resolve_runtime_cond;
 use crate::generator::resolve_conditions::simplify_condition;
-use crate::generator::resolve_enums::ResolvedEnum;
 use crate::generator::rust::bitvector_constructor;
 use crate::generator::rust::evaluate_bitvector_cast;
 use crate::generator::rust::format_bitvector;
@@ -25,6 +24,7 @@ use crate::model::Type;
 use crate::model::Union;
 use crate::model::Value;
 use crate::sail::Sail;
+use crate::types_repository::ResolvedEnum;
 use log::debug;
 use log::error;
 use log::warn;
@@ -54,7 +54,7 @@ type RustCode = String;
 pub struct CodeGenerator {
     emit_comments: bool,
     signatures: Union,
-    types: ResolvedTypes,
+    types: TypesRepository,
     csr: CsrList,
     extensions: Extensions,
 
@@ -72,7 +72,7 @@ pub struct CodeGenerator {
 impl CodeGenerator {
     pub fn new(
         signatures: Union,
-        types: ResolvedTypes,
+        types: TypesRepository,
         csr: CsrList,
         extensions: Extensions,
     ) -> Self {

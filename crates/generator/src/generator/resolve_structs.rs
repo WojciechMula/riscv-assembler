@@ -1,4 +1,4 @@
-use crate::generator::ResolvedTypes;
+use crate::TypesRepository;
 use crate::generator::resolve_enums::type_name;
 use crate::model::Type;
 use crate::model::Union;
@@ -8,7 +8,7 @@ use log::debug;
 use std::collections::BTreeSet;
 
 pub fn resolve_structs(
-    types: &mut ResolvedTypes,
+    types: &mut TypesRepository,
     instructions: &Union,
     sail: &Sail,
 ) -> crate::Result<()> {

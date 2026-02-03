@@ -1,6 +1,9 @@
 mod generator;
 mod sail;
 
+pub mod types_repository;
+pub use types_repository::TypesRepository;
+
 pub mod model;
 
 pub use generator::generate;

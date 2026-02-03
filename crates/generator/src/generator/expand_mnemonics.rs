@@ -1,6 +1,6 @@
+use crate::TypesRepository;
 use crate::err;
 use crate::errfmt;
-use crate::generator::ResolvedTypes;
 use crate::model::BinaryConcatenation;
 use crate::model::BitVector;
 use crate::model::Builtin;
@@ -48,7 +48,7 @@ use std::iter::zip;
             ...
 */
 pub fn expand_mnemonics(
-    types: &mut ResolvedTypes,
+    types: &mut TypesRepository,
     assembly: &Mapping,
     sail: &Sail,
 ) -> crate::Result<Vec<Instruction>> {
@@ -123,7 +123,7 @@ fn split_at_space(args: &[Value]) -> (Vec<Value>, Vec<Value>) {
 }
 
 fn expand_functions(
-    types: &mut ResolvedTypes,
+    types: &mut TypesRepository,
     mnemonic: &[Value],
     sail: &Sail,
 ) -> crate::Result<Vec<Expanded>> {
@@ -354,7 +354,7 @@ mod test {
 
         let sail = Sail::new(code.to_string());
         let mapping = sail.mapping("assembly").unwrap();
-        let types = ResolvedTypes::default();
+        let types = TypesRepository::default();
 
         let expanded = expand_mnemonics(&types, &mapping, &sail).unwrap();
 
