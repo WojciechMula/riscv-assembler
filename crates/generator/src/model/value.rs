@@ -61,6 +61,13 @@ impl Value {
         }
     }
 
+    pub fn as_struct(&self) -> crate::Result<&Struct> {
+        match self {
+            Value::Struct(v) => Ok(v),
+            _ => err!("expected struct, got {self:?}"),
+        }
+    }
+
     pub fn as_tuple(&self) -> crate::Result<&Vec<Value>> {
         match self {
             Value::Tuple(v) => Ok(v),

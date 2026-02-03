@@ -7833,9 +7833,9 @@ fn parse_sc_d(parser: &mut Parser) -> crate::Result<u32> {
 fn parse_mul(parser: &mut Parser) -> crate::Result<u32> {
     // predefined constants
     let mul_op = mul_op {
-        result_part: Low,
-        signed_rs1: Signed,
-        signed_rs2: Signed,
+        result_part: VectorHalf::Low,
+        signed_rs1: Signedness::Signed,
+        signed_rs2: Signedness::Signed,
     };
     // parse arguments
     let rd = reg_name(parser)?;
@@ -7848,9 +7848,9 @@ fn parse_mul(parser: &mut Parser) -> crate::Result<u32> {
 fn parse_mulh(parser: &mut Parser) -> crate::Result<u32> {
     // predefined constants
     let mul_op = mul_op {
-        result_part: High,
-        signed_rs1: Signed,
-        signed_rs2: Signed,
+        result_part: VectorHalf::High,
+        signed_rs1: Signedness::Signed,
+        signed_rs2: Signedness::Signed,
     };
     // parse arguments
     let rd = reg_name(parser)?;
@@ -7863,9 +7863,9 @@ fn parse_mulh(parser: &mut Parser) -> crate::Result<u32> {
 fn parse_mulhsu(parser: &mut Parser) -> crate::Result<u32> {
     // predefined constants
     let mul_op = mul_op {
-        result_part: High,
-        signed_rs1: Signed,
-        signed_rs2: Unsigned,
+        result_part: VectorHalf::High,
+        signed_rs1: Signedness::Signed,
+        signed_rs2: Signedness::Unsigned,
     };
     // parse arguments
     let rd = reg_name(parser)?;
@@ -7878,9 +7878,9 @@ fn parse_mulhsu(parser: &mut Parser) -> crate::Result<u32> {
 fn parse_mulhu(parser: &mut Parser) -> crate::Result<u32> {
     // predefined constants
     let mul_op = mul_op {
-        result_part: High,
-        signed_rs1: Unsigned,
-        signed_rs2: Unsigned,
+        result_part: VectorHalf::High,
+        signed_rs1: Signedness::Unsigned,
+        signed_rs2: Signedness::Unsigned,
     };
     // parse arguments
     let rd = reg_name(parser)?;

@@ -111,6 +111,19 @@ impl ResolvedTypes {
         }
     }
 
+    pub fn get_struct(&mut self, name: &str, sail: &Sail) -> crate::Result<&StructSignature> {
+        if !self.structs.contains_key(name) {
+            let mut struct_signature = sail.get_struct(name)?;
+            for typ in struct_signature.fields.values_mut() {
+                *typ = self.resolve_types(&typ, sail)?;
+            }
+
+            self.structs.insert(name.to_string(), struct_signature);
+        }
+
+        Ok(self.structs.get(name).as_ref().unwrap())
+    }
+
     pub fn mapping(&mut self, name: &str, sail: &Sail) -> crate::Result<&Mapping> {
         if !self.mappings.contains_key(name) {
             let mut mapping = sail.mapping(name)?;

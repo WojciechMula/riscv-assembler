@@ -1,4 +1,6 @@
 // Sail types
+use crate::assembler::Signedness;
+use crate::assembler::VectorHalf;
 use crate::assembler::mul_op;
 use crate::assembler::rounding_mode;
 //
@@ -58,24 +60,24 @@ pub fn width_enc_wide(v: word_width_wide) -> BitVector<3> {
 pub fn encdec_mul_op(val: mul_op) -> BitVector<3> {
     match val {
         mul_op {
-            high: false,
-            signed_rs1: true,
-            signed_rs2: true,
+            result_part: VectorHalf::Low,
+            signed_rs1: Signedness::Signed,
+            signed_rs2: Signedness::Unsigned,
         } => BitVector::<3>::new(0b000),
         mul_op {
-            high: true,
-            signed_rs1: true,
-            signed_rs2: true,
+            result_part: VectorHalf::High,
+            signed_rs1: Signedness::Signed,
+            signed_rs2: Signedness::Unsigned,
         } => BitVector::<3>::new(0b001),
         mul_op {
-            high: true,
-            signed_rs1: true,
-            signed_rs2: false,
+            result_part: VectorHalf::High,
+            signed_rs1: Signedness::Signed,
+            signed_rs2: Signedness::Unsigned,
         } => BitVector::<3>::new(0b010),
         mul_op {
-            high: true,
-            signed_rs1: false,
-            signed_rs2: false,
+            result_part: VectorHalf::High,
+            signed_rs1: Signedness::Signed,
+            signed_rs2: Signedness::Unsigned,
         } => BitVector::<3>::new(0b011),
         _ => unreachable!(),
     }
@@ -331,7 +333,7 @@ pub fn sp_reg_name(parser: &mut Parser) -> crate::Result<()> {
         return err!("expected stack pointer (sp or x2)");
     }
 
-    Ok(());
+    Ok(())
 }
 
 pub fn freg_or_reg_name(_parse: &mut Parser) -> crate::Result<fregidx> {

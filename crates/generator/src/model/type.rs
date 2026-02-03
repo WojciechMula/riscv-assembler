@@ -43,6 +43,13 @@ impl Type {
         }
     }
 
+    pub fn as_struct(&self) -> Option<&String> {
+        match self {
+            Type::Struct(name) => Some(name),
+            _ => None,
+        }
+    }
+
     pub fn as_bitvector(&self) -> crate::Result<usize> {
         match self {
             Type::BitVector(bit_width) => Ok(*bit_width),

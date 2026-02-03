@@ -57,7 +57,6 @@ pub fn expand_mnemonics(
     for Pair { lhs, rhs, cond } in &assembly.pairs {
         let constructor = lhs.as_fn_call()?;
         debug!("expanding {}", constructor.name);
-        debug!("{rhs:?}");
 
         if let Value::StringConcatenation(args) = rhs {
             let (mnemonic, arguments) = split_at_space(args);
@@ -174,6 +173,32 @@ fn expand_functions(
                                     label: label.clone(),
                                 }),
                             );
+                        } else if let Some(typename) = mapping.signature.lhs.as_struct() {
+                            let struct_type = types.get_struct(typename, sail)?;
+                            let mut struct_val = pair.lhs.as_struct()?.clone();
+
+                            for (label, val) in struct_val.values.iter_mut() {
+                                if let Value::Symbol(ident) = val {
+                                    let typ = match struct_type.fields.get(label) {
+                                        Some(typ) => typ,
+                                        None => {
+                                            return err!(
+                                                "no field named {label} in struct {typename}"
+                                            );
+                                        }
+                                    };
+                                    if let Some(enum_typename) = typ.as_enum() {
+                                        *val = Value::EnumLabel(EnumLabel {
+                                            typename: enum_typename.clone(),
+                                            label: ident.clone(),
+                                        });
+                                    }
+                                }
+                            }
+
+                            expanded
+                                .substituted
+                                .insert(name.clone(), Value::Struct(struct_val));
                         } else {
                             expanded.substituted.insert(name.clone(), pair.lhs.clone());
                         }
