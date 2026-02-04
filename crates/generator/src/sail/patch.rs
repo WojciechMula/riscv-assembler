@@ -30,6 +30,11 @@ fn replace_known_functions_aux(v: &Value) -> Option<Value> {
             let binding = fun.args[0].as_symbol().unwrap().to_string();
             Some(Builtin::CsrName { binding })
         }
+        ("label", 2) => {
+            let binding = fun.args[0].as_symbol().unwrap().to_string();
+            let bit_width = fun.args[1].as_integer().unwrap() as usize;
+            Some(Builtin::Label { binding, bit_width })
+        }
         _ => None,
     };
 

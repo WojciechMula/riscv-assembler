@@ -292,6 +292,13 @@ impl CodeGenerator {
                     Builtin::CsrName { binding } => {
                         w!(f, "let {binding} = csr_name_map(parser)?;");
                     }
+                    Builtin::Label { binding, bit_width } => {
+                        w!(
+                            f,
+                            "let {binding} = resolve_label::<{bit_width}>(parser, l)?;"
+                        );
+                        needs_label = true;
+                    }
                     Builtin::SubVector { .. } => unreachable!(),
                 },
                 Value::FunctionInvocation(FunctionInvocation { name, args }) => {

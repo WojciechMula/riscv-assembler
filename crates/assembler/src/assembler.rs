@@ -228,15 +228,19 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "bclr" => parse_bclr(&mut p, ctx),
         "bclri" => parse_bclri(&mut p, ctx),
         "beq" => parse_beq(&mut p),
+        "beqz" => parse_beqz(&mut p, l),
         "bext" => parse_bext(&mut p, ctx),
         "bexti" => parse_bexti(&mut p, ctx),
         "bge" => parse_bge(&mut p),
         "bgeu" => parse_bgeu(&mut p),
+        "bgez" => parse_bgez(&mut p, l),
         "binv" => parse_binv(&mut p, ctx),
         "binvi" => parse_binvi(&mut p, ctx),
         "blt" => parse_blt(&mut p),
         "bltu" => parse_bltu(&mut p),
+        "bltz" => parse_bltz(&mut p, l),
         "bne" => parse_bne(&mut p),
+        "bnez" => parse_bnez(&mut p, l),
         "brev8" => parse_brev8(&mut p),
         "bset" => parse_bset(&mut p, ctx),
         "bseti" => parse_bseti(&mut p, ctx),
@@ -318,12 +322,14 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "clzw" => parse_clzw(&mut p),
         "cpop" => parse_cpop(&mut p),
         "cpopw" => parse_cpopw(&mut p),
+        "csrr" => parse_csrr(&mut p),
         "csrrc" => parse_csrrc(&mut p),
         "csrrci" => parse_csrrci(&mut p),
         "csrrs" => parse_csrrs(&mut p),
         "csrrsi" => parse_csrrsi(&mut p),
         "csrrw" => parse_csrrw(&mut p),
         "csrrwi" => parse_csrrwi(&mut p),
+        "csrw" => parse_csrw(&mut p),
         "ctz" => parse_ctz(&mut p),
         "ctzw" => parse_ctzw(&mut p),
         "czero.eqz" => parse_czero_eqz(&mut p),
@@ -460,8 +466,10 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "fsub.s" => parse_fsub_s(&mut p, ctx),
         "fsw" => parse_fsw(&mut p),
         "illegal" => parse_illegal(&mut p),
+        "j" => parse_j(&mut p, l),
         "jal" => parse_jal(&mut p),
         "jalr" => parse_jalr(&mut p),
+        "jr" => parse_jr(&mut p),
         "lb" => parse_lb(&mut p),
         "lbu" => parse_lbu(&mut p),
         "ld" => parse_ld(&mut p),
@@ -539,6 +547,10 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "mulhu" => parse_mulhu(&mut p),
         "mulw" => parse_mulw(&mut p, ctx),
         "mv" => parse_mv(&mut p),
+        "neg" => parse_neg(&mut p),
+        "negw" => parse_negw(&mut p, ctx),
+        "nop" => parse_nop(),
+        "not" => parse_not(&mut p),
         "ntl.all" => parse_ntl_all(),
         "ntl.p1" => parse_ntl_p1(),
         "ntl.pall" => parse_ntl_pall(),
@@ -558,6 +570,7 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "remu" => parse_remu(&mut p),
         "remuw" => parse_remuw(&mut p, ctx),
         "remw" => parse_remw(&mut p, ctx),
+        "ret" => parse_ret(),
         "rev8" => parse_rev8(&mut p, ctx),
         "rol" => parse_rol(&mut p, ctx),
         "rolw" => parse_rolw(&mut p, ctx),
@@ -583,11 +596,14 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "sc.w.aqrl" => parse_sc_w_aqrl(&mut p),
         "sc.w.rl" => parse_sc_w_rl(&mut p),
         "sd" => parse_sd(&mut p),
+        "seqz" => parse_seqz(&mut p),
         "sext.b" => parse_sext_b(&mut p, ctx),
         "sext.h" => parse_sext_h(&mut p, ctx),
+        "sext.w" => parse_sext_w(&mut p),
         "sfence.inval.ir" => parse_sfence_inval_ir(),
         "sfence.vma" => parse_sfence_vma(&mut p),
         "sfence.w.inval" => parse_sfence_w_inval(),
+        "sgtz" => parse_sgtz(&mut p),
         "sh" => parse_sh(&mut p),
         "sh1add" => parse_sh1add(&mut p),
         "sh1add.uw" => parse_sh1add_uw(&mut p, ctx),
@@ -619,10 +635,12 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "slti" => parse_slti(&mut p),
         "sltiu" => parse_sltiu(&mut p),
         "sltu" => parse_sltu(&mut p),
+        "sltz" => parse_sltz(&mut p),
         "sm3p0" => parse_sm3p0(&mut p),
         "sm3p1" => parse_sm3p1(&mut p),
         "sm4ed" => parse_sm4ed(&mut p),
         "sm4ks" => parse_sm4ks(&mut p),
+        "snez" => parse_snez(&mut p),
         "sra" => parse_sra(&mut p),
         "srai" => parse_srai(&mut p),
         "sraiw" => parse_sraiw(&mut p, ctx),
@@ -1316,6 +1334,7 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "xori" => parse_xori(&mut p),
         "xperm4" => parse_xperm4(&mut p),
         "xperm8" => parse_xperm8(&mut p),
+        "zext.b" => parse_zext_b(&mut p),
         "zext.h" => parse_zext_h(&mut p, ctx),
         "zip" => parse_zip(&mut p),
         _ => err!("`{ident}` is not a recognized instruction"),
@@ -20056,19 +20075,187 @@ fn parse_c_nop(parser: &mut Parser) -> crate::Result<u32> {
     let imm = parser.optional_unsigned_nonzero::<6>()?;
     encode_c_nop(imm)
 }
+fn parse_nop() -> crate::Result<u32> {
+    encode_itype(
+        BitVector::<12> {
+            val: 0b000000000000,
+        },
+        zreg,
+        zreg,
+        iop::ADDI,
+    )
+}
 fn parse_mv(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
     parser.expect_comma()?;
-    let rs1 = reg_name(parser)?;
+    let rs = reg_name(parser)?;
     encode_itype(
+        BitVector::<12> {
+            val: 0b000000000000,
+        },
+        rs,
+        rd,
+        iop::ADDI,
+    )
+}
+fn parse_not(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_itype(
+        BitVector::<12> {
+            val: 0b111111111111,
+        },
+        rs,
+        rd,
+        iop::XORI,
+    )
+}
+fn parse_neg(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_rtype(rs, zreg, rd, rop::SUB)
+}
+fn parse_negw(parser: &mut Parser, ctx: &Context) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    if !(ctx.is_64bit()) {
+        return err!("available only in 64-bit mode");
+    }
+
+    encode_rtypew(zreg, rs, rd, ropw::SUBW, ctx)
+}
+fn parse_sext_w(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs1 = reg_name(parser)?;
+    encode_addiw(
         BitVector::<12> {
             val: 0b000000000000,
         },
         rs1,
         rd,
-        iop::ADDI,
     )
+}
+fn parse_zext_b(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_itype(
+        BitVector::<12> {
+            val: 0b000011111111,
+        },
+        rs,
+        rd,
+        iop::ANDI,
+    )
+}
+fn parse_seqz(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_itype(
+        BitVector::<12> {
+            val: 0b000000000001,
+        },
+        rs,
+        rd,
+        iop::SLTIU,
+    )
+}
+fn parse_snez(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_rtype(zreg, rs, rd, rop::SLTU)
+}
+fn parse_sltz(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_rtype(zreg, rs, rd, rop::SLT)
+}
+fn parse_sgtz(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs = reg_name(parser)?;
+    encode_rtype(rs, zreg, rd, rop::SLT)
+}
+fn parse_j(parser: &mut Parser, l: &mut dyn LabelResolverTrait) -> crate::Result<u32> {
+    // parse arguments
+    let imm = resolve_label::<21>(parser, l)?;
+    encode_jal(imm, zreg)
+}
+fn parse_jr(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let imm = parser.expect_signed_immediate::<12>()?;
+    parser.expect("(")?;
+    let rs1 = reg_name(parser)?;
+    parser.expect(")")?;
+    encode_jalr(imm, rs1, zreg)
+}
+fn parse_ret() -> crate::Result<u32> {
+    encode_jalr(
+        BitVector::<12> {
+            val: 0b000000000000,
+        },
+        x1,
+        zreg,
+    )
+}
+fn parse_csrr(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let csr = csr_name_map(parser)?;
+    encode_csrreg(csr, zreg, rd, csrop::CSRRS)
+}
+fn parse_csrw(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let csr = csr_name_map(parser)?;
+    parser.expect_comma()?;
+    let rs1 = reg_name(parser)?;
+    encode_csrreg(csr, rs1, zreg, csrop::CSRRW)
+}
+fn parse_beqz(parser: &mut Parser, l: &mut dyn LabelResolverTrait) -> crate::Result<u32> {
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = resolve_label::<13>(parser, l)?;
+    encode_btype(imm, zreg, rs1, bop::BEQ)
+}
+fn parse_bnez(parser: &mut Parser, l: &mut dyn LabelResolverTrait) -> crate::Result<u32> {
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = resolve_label::<13>(parser, l)?;
+    encode_btype(imm, zreg, rs1, bop::BNE)
+}
+fn parse_bgez(parser: &mut Parser, l: &mut dyn LabelResolverTrait) -> crate::Result<u32> {
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = resolve_label::<13>(parser, l)?;
+    encode_btype(imm, zreg, rs1, bop::BGE)
+}
+fn parse_bltz(parser: &mut Parser, l: &mut dyn LabelResolverTrait) -> crate::Result<u32> {
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = resolve_label::<13>(parser, l)?;
+    encode_btype(imm, zreg, rs1, bop::BLT)
 }
 fn encdec_amoop(v: amoop) -> BitVector<5> {
     match v {

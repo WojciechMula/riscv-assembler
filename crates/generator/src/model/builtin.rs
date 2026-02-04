@@ -36,6 +36,11 @@ pub enum Builtin {
         lo: usize,
         hi: usize,
     },
+
+    Label {
+        binding: String,
+        bit_width: usize,
+    },
 }
 
 impl From<Builtin> for Value {
