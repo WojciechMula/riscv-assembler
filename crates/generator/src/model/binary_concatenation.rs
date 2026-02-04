@@ -12,6 +12,7 @@ impl BinaryConcatenation {
             Value::BitVector(..) => false,
             Value::Cast(.., typ) => !typ.is_bitvector(),
             Value::Integer(..) => true,
+            Value::Symbol(..) => true,
             Value::BinaryConcatenation(..) => true,
             _ => todo!("{self:?}"),
         })
@@ -44,7 +45,6 @@ fn normalize_inplace(bc: &mut BinaryConcatenation, t: &Type) -> crate::Result<()
     let total_bit_width = t.as_bitvector()?;
 
     let mut k: Option<usize> = None;
-    let mut value = 0_u64;
 
     let mut known_width = 0_usize;
     for (i, val) in bc.0.iter().enumerate() {
@@ -56,13 +56,12 @@ fn normalize_inplace(bc: &mut BinaryConcatenation, t: &Type) -> crate::Result<()
                 let bit_width = typ.as_bitvector()?;
                 known_width += bit_width;
             }
-            Value::Integer(val) => {
+            Value::Integer(_) | Value::Symbol(_) => {
                 if k.is_some() {
                     return err!("item #{i}: more than one element of unknown bit width `{val:?}`");
                 }
 
                 k = Some(i);
-                value = *val as u64;
             }
             _ => {
                 return err!("item #{i}: unsupported value type `{val:?}`");
@@ -77,9 +76,21 @@ fn normalize_inplace(bc: &mut BinaryConcatenation, t: &Type) -> crate::Result<()
     }
 
     let bit_width = total_bit_width - known_width;
-    let v = BitVector::try_new(value, bit_width)?;
+    let k = k.unwrap();
 
-    bc.0[k.unwrap()] = Value::BitVector(v);
+    match &bc.0[k] {
+        Value::Integer(value) => {
+            let v = BitVector::try_new(*value as u64, bit_width)?;
+            bc.0[k] = Value::BitVector(v);
+        }
+        Value::Symbol(_) => {
+            let symbol = bc.0[k].clone();
+            let v = Value::Cast(Box::new(symbol), Type::BitVector(bit_width));
+
+            bc.0[k] = v;
+        }
+        _ => unreachable!(),
+    }
 
     Ok(())
 }
@@ -99,7 +110,7 @@ mod test {
     }
 
     #[test]
-    fn test_normalize_bitconcat() {
+    fn test_normalize_bitconcat_case1() {
         let concat = BinaryConcatenation(vec![
             bitvector(0, 3),
             bitvector(0, 4),
@@ -114,6 +125,24 @@ mod test {
             bitvector(0, 4),
             bitvector(42, 20 - (3 + 4 + 7)),
             Value::Cast(sym("x"), Type::BitVector(7)),
+        ];
+
+        assert!(concat.needs_normalisation());
+
+        let got = concat.normalize(&typ).unwrap();
+
+        assert_eq!(got.0, expected);
+    }
+
+    #[test]
+    fn test_normalize_bitconcat_case2() {
+        let concat = BinaryConcatenation(vec![bitvector(0, 5), Value::Symbol("imm".into())]);
+
+        let typ = Type::BitVector(15);
+
+        let expected = vec![
+            bitvector(0, 5),
+            Value::Cast(Box::new(Value::Symbol("imm".into())), Type::BitVector(10)),
         ];
 
         assert!(concat.needs_normalisation());

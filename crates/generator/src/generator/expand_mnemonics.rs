@@ -354,9 +354,9 @@ mod test {
 
         let sail = Sail::new(code.to_string());
         let mapping = sail.mapping("assembly").unwrap();
-        let types = TypesRepository::default();
+        let mut types = TypesRepository::default();
 
-        let expanded = expand_mnemonics(&types, &mapping, &sail).unwrap();
+        let expanded = expand_mnemonics(&mut types, &mapping, &sail).unwrap();
 
         assert_eq!(expanded.len(), 3);
         assert_eq!(expanded[2].mnemonic, "csrrc");

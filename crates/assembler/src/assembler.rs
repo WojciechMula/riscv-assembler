@@ -227,10 +227,16 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "auipc" => parse_auipc(&mut p),
         "bclr" => parse_bclr(&mut p, ctx),
         "bclri" => parse_bclri(&mut p, ctx),
+        "beq" => parse_beq(&mut p),
         "bext" => parse_bext(&mut p, ctx),
         "bexti" => parse_bexti(&mut p, ctx),
+        "bge" => parse_bge(&mut p),
+        "bgeu" => parse_bgeu(&mut p),
         "binv" => parse_binv(&mut p, ctx),
         "binvi" => parse_binvi(&mut p, ctx),
+        "blt" => parse_blt(&mut p),
+        "bltu" => parse_bltu(&mut p),
+        "bne" => parse_bne(&mut p),
         "brev8" => parse_brev8(&mut p),
         "bset" => parse_bset(&mut p, ctx),
         "bseti" => parse_bseti(&mut p, ctx),
@@ -454,6 +460,7 @@ pub fn assemble(s: &str, ctx: &Context, l: &mut dyn LabelResolverTrait) -> crate
         "fsub.s" => parse_fsub_s(&mut p, ctx),
         "fsw" => parse_fsw(&mut p),
         "illegal" => parse_illegal(&mut p),
+        "jal" => parse_jal(&mut p),
         "jalr" => parse_jalr(&mut p),
         "lb" => parse_lb(&mut p),
         "lbu" => parse_lbu(&mut p),
@@ -3641,6 +3648,13 @@ fn parse_auipc(parser: &mut Parser) -> crate::Result<u32> {
     let imm = parser.expect_signed_immediate::<20>()?;
     encode_utype(imm, rd, op)
 }
+fn parse_jal(parser: &mut Parser) -> crate::Result<u32> {
+    // parse arguments
+    let rd = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<21>()?;
+    encode_jal(imm, rd)
+}
 fn parse_jalr(parser: &mut Parser) -> crate::Result<u32> {
     // parse arguments
     let rd = reg_name(parser)?;
@@ -3650,6 +3664,72 @@ fn parse_jalr(parser: &mut Parser) -> crate::Result<u32> {
     let rs1 = reg_name(parser)?;
     parser.expect(")")?;
     encode_jalr(imm, rs1, rd)
+}
+fn parse_beq(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BEQ;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
+}
+fn parse_bne(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BNE;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
+}
+fn parse_blt(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BLT;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
+}
+fn parse_bge(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BGE;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
+}
+fn parse_bltu(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BLTU;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
+}
+fn parse_bgeu(parser: &mut Parser) -> crate::Result<u32> {
+    // predefined constants
+    let op = bop::BGEU;
+    // parse arguments
+    let rs1 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let rs2 = reg_name(parser)?;
+    parser.expect_comma()?;
+    let imm = parser.expect_signed_immediate::<13>()?;
+    encode_btype(imm, rs2, rs1, op)
 }
 fn parse_addi(parser: &mut Parser) -> crate::Result<u32> {
     // predefined constants
@@ -20004,6 +20084,16 @@ fn encdec_amoop(v: amoop) -> BitVector<5> {
         amoop::AMOCAS => BitVector::<5>::new(0b00101),
     }
 }
+fn encdec_bop(v: bop) -> BitVector<3> {
+    match v {
+        bop::BEQ => BitVector::<3>::new(0b000),
+        bop::BNE => BitVector::<3>::new(0b001),
+        bop::BLT => BitVector::<3>::new(0b100),
+        bop::BGE => BitVector::<3>::new(0b101),
+        bop::BLTU => BitVector::<3>::new(0b110),
+        bop::BGEU => BitVector::<3>::new(0b111),
+    }
+}
 fn encdec_cbop(v: cbop_zicbom) -> BitVector<12> {
     match v {
         cbop_zicbom::CBO_CLEAN => BitVector::<12>::new(0b000000000001),
@@ -20674,13 +20764,29 @@ fn encode_pause() -> crate::Result<u32> {
         | (0b0001_u32 << 24)
         | (0b0000_u32 << 28))
 }
-fn encode_lpad(lpl: BitVector<20>) -> crate::Result<u32> {
+fn encode_lpad(lpl: landing_pad_label) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b0010111_u32 << 0) | (0b00000_u32 << 7) | (lpl.val << 12))
 }
 fn encode_utype(imm: BitVector<20>, rd: regidx, op: uop) -> crate::Result<u32> {
     // instruction assembling
     Ok((encdec_uop(op).val << 0) | (encdec_reg(rd).val << 7) | (imm.val << 12))
+}
+fn encode_jal(arg0: BitVector<21>, rd: regidx) -> crate::Result<u32> {
+    // deconstruction of `arg0`
+    let actual = BitVector::<1>::from_subword(arg0.val >> 0);
+    let expected = BitVector::<1>::new(0b0);
+    if actual != expected {
+        return err!("bits [0:0] have to be 0b0, got 0b{:01b}", actual.val);
+    }
+    let imm = BitVector::<20>::from_subword(arg0.val >> 1);
+    // instruction assembling
+    Ok((0b1101111_u32 << 0)
+        | (encdec_reg(rd).val << 7)
+        | ((imm.val >> 11) & 0b11111111)
+        | ((imm.val >> 10) & 0b1)
+        | ((imm.val >> 0) & 0b1111111111)
+        | ((imm.val >> 19) & 0b1))
 }
 fn encode_jalr(imm: BitVector<12>, rs1: regidx, rd: regidx) -> crate::Result<u32> {
     // instruction assembling
@@ -20689,6 +20795,24 @@ fn encode_jalr(imm: BitVector<12>, rs1: regidx, rd: regidx) -> crate::Result<u32
         | (0b000_u32 << 12)
         | (encdec_reg(rs1).val << 15)
         | (imm.val << 20))
+}
+fn encode_btype(arg0: BitVector<13>, rs2: regidx, rs1: regidx, op: bop) -> crate::Result<u32> {
+    // deconstruction of `arg0`
+    let actual = BitVector::<1>::from_subword(arg0.val >> 0);
+    let expected = BitVector::<1>::new(0b0);
+    if actual != expected {
+        return err!("bits [0:0] have to be 0b0, got 0b{:01b}", actual.val);
+    }
+    let imm = BitVector::<12>::from_subword(arg0.val >> 1);
+    // instruction assembling
+    Ok((0b1100011_u32 << 0)
+        | ((imm.val >> 10) & 0b1)
+        | ((imm.val >> 0) & 0b1111)
+        | (encdec_bop(op).val << 12)
+        | (encdec_reg(rs1).val << 15)
+        | (encdec_reg(rs2).val << 20)
+        | ((imm.val >> 4) & 0b111111)
+        | ((imm.val >> 11) & 0b1))
 }
 fn encode_itype(imm: BitVector<12>, rs1: regidx, rd: regidx, op: iop) -> crate::Result<u32> {
     // instruction assembling

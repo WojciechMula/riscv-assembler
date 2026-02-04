@@ -454,9 +454,16 @@ impl CodeGenerator {
                 Value::Symbol(_) => (),
                 Value::EnumLabel(_) => (),
                 Value::BitVector(..) => (),
-                Value::BinaryConcatenation(args) => {
+                Value::BinaryConcatenation(bc) => {
                     let arg_name = &rust_sig[i].0;
-                    f += &make_binary_concatenation_deconstruction(arg_name, args)?;
+                    if bc.needs_normalisation() {
+                        let tuple = instruction.binary[0].signature.as_tuple()?;
+                        let typ = tuple.get(i).ok_or("index out of range")?;
+                        let bc = bc.normalize(typ)?;
+                        f += &make_binary_concatenation_deconstruction(arg_name, &bc)?;
+                    } else {
+                        f += &make_binary_concatenation_deconstruction(arg_name, bc)?;
+                    }
                 }
                 _ => {
                     return err!("argument #{i}: unexpected argument {item:?}");
@@ -856,7 +863,6 @@ fn make_binary_concatenation_deconstruction(
                 offset += bit_width;
             }
             _ => {
-                debug!("{bc:?}");
                 return err!("unexpected {val:?}");
             }
         }
