@@ -6,6 +6,7 @@ use crate::model::Pair;
 use crate::model::Value;
 use crate::sail::Parser;
 use crate::sail::Token;
+use log::warn;
 
 pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Mapping> {
     let mut result = Mapping {
@@ -33,7 +34,7 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
             lhs_cond = parse_expression(p)?;
         }
 
-        p.expect(separator)?;
+        p.expect(separator.clone())?;
 
         let rhs = parse_expression(p)?;
 
@@ -52,7 +53,11 @@ pub fn parse_mapping(p: &mut Parser, sig: MappingSignature) -> crate::Result<Map
             None
         };
 
-        result.pairs.push(Pair { lhs, rhs, cond });
+        if separator == Token::Bidrectional {
+            result.pairs.push(Pair { lhs, rhs, cond });
+        } else {
+            warn!("ignoring forward/backward mapping: {lhs:?}");
+        }
 
         let token = p.peek();
         match token {
