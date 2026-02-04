@@ -20764,7 +20764,7 @@ fn encode_pause() -> crate::Result<u32> {
         | (0b0001_u32 << 24)
         | (0b0000_u32 << 28))
 }
-fn encode_lpad(lpl: landing_pad_label) -> crate::Result<u32> {
+fn encode_lpad(lpl: BitVector<20>) -> crate::Result<u32> {
     // instruction assembling
     Ok((0b0010111_u32 << 0) | (0b00000_u32 << 7) | (lpl.val << 12))
 }

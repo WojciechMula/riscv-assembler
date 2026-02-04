@@ -142,6 +142,14 @@ impl Sail {
 
         let mut p = self.parser(*offset);
 
+        // syntax:
+        //
+        // type alias_name = type
+        //
+        // The parser points at the alias_name
+        let _ = p.identifier()?;
+        p.expect(Token::Equals)?;
+
         match Type::parse(&mut p) {
             Ok(v) => Ok(v),
             Err(err) => Err(self.error(&p, err.to_string())),
