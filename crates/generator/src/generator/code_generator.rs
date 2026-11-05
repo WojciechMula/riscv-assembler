@@ -4,6 +4,7 @@ use crate::generator::Extensions;
 use crate::generator::Instruction;
 use crate::generator::TypesRepository;
 use crate::generator::csr::CsrList;
+use crate::generator::resolve_conditions::Condition;
 use crate::generator::resolve_conditions::resolve_arch_condition;
 use crate::generator::resolve_conditions::resolve_runtime_cond;
 use crate::generator::resolve_conditions::simplify_condition;
@@ -29,6 +30,7 @@ use log::debug;
 use log::error;
 use log::warn;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
@@ -64,6 +66,7 @@ pub struct CodeGenerator {
     encoder_names: HashSet<RustName>,
     encoders: Vec<RustCode>,
     mnemonic2parser: BTreeMap<Mnemonic, RustName>,
+    referenced_csrs: BTreeSet<RustName>,
     needs_ctx: HashSet<RustName>,
     needs_parser: HashSet<RustName>,
     needs_label: HashSet<RustName>,
@@ -157,6 +160,129 @@ impl CodeGenerator {
         f
     }
 
+    pub fn add_instructions(
+        &mut self,
+        instructions: &[Instruction],
+        sail: &Sail,
+    ) -> crate::Result<()> {
+        assert!(!instructions.is_empty());
+
+        struct Variant {
+            name: String,
+            needs_ctx: bool,
+            needs_parser: bool,
+            needs_label: bool,
+        }
+
+        impl Variant {
+            fn invocation(&self) -> String {
+                let mut args = Vec::<&str>::new();
+                if self.needs_parser {
+                    args.push("parser");
+                }
+                if self.needs_ctx {
+                    args.push("ctx");
+                }
+                if self.needs_label {
+                    args.push("l");
+                }
+
+                format!("{}({})", self.name, args.join(", "))
+            }
+        }
+
+        let mut needs_ctx = false;
+        let mut needs_parser = true;
+        let mut needs_label = false;
+        let mut functions = Vec::<Variant>::new();
+
+        for (id, instruction) in instructions.iter().enumerate() {
+            let parser_name = format!("{}_case{}", parser_fn_name(instruction), id);
+            let (nc, np, nl) = self.add_instruction_variant(instruction, sail, &parser_name)?;
+            functions.push(Variant {
+                name: parser_name,
+                needs_ctx: nc,
+                needs_parser: np,
+                needs_label: nl,
+            });
+
+            needs_ctx |= nc;
+            needs_parser |= np;
+            needs_label |= nl;
+        }
+
+        let parser_name = parser_fn_name(&instructions[0]);
+
+        let mut args = Vec::<String>::new();
+        if needs_parser {
+            args.push("parser: &mut Parser".into());
+        }
+        if needs_ctx {
+            args.push("ctx: &Context".into());
+        }
+        if needs_label {
+            args.push("l: &mut dyn LabelResolverTrait".into());
+        }
+
+        let args = args.join(", ");
+
+        let mut s = String::new();
+        w!(s, "fn {parser_name}({args}) -> crate::Result<u32> {{");
+        for (id, funct) in functions.iter().enumerate() {
+            if self.emit_comments {
+                w!(s, "// variant #{}", id + 1);
+            }
+            w!(s, "let state = parser.save();");
+            w!(s, "if let Ok(code) = {} {{", funct.invocation());
+            w!(s, "return Ok(code);");
+            w!(s, "}} else {{");
+            w!(s, "parser.restore(state)");
+            w!(s, "}}");
+        }
+
+        w!(s, "err!(\"invalid syntax\")");
+        w!(s, "}}");
+
+        self.parsers.push(s);
+        if needs_ctx {
+            self.needs_ctx.insert(parser_name.clone());
+        }
+        if needs_parser {
+            self.needs_parser.insert(parser_name.clone());
+        }
+        if needs_label {
+            self.needs_label.insert(parser_name.clone());
+        }
+
+        self.mnemonic2parser
+            .insert(instructions[0].mnemonic.clone(), parser_name);
+
+        Ok(())
+    }
+
+    pub fn add_instruction_variant(
+        &mut self,
+        instruction: &Instruction,
+        sail: &Sail,
+        parser_name: &str,
+    ) -> crate::Result<(bool, bool, bool)> {
+        let encoder_name = encoder_fn_name(instruction);
+        if self.encoder_names.insert(encoder_name.clone()) {
+            let (encoder, needs_ctx) =
+                Self::emit_instruction_encoder(&encoder_name, instruction, &self.signatures, sail)?;
+            self.encoders.push(encoder);
+            if needs_ctx {
+                self.needs_ctx.insert(encoder_name);
+            }
+        }
+
+        let (parser, needs_ctx, needs_parser, needs_label) =
+            self.emit_instruction_parser(parser_name, instruction, sail)?;
+        self.parsers.push(parser);
+
+        Ok((needs_ctx, needs_parser, needs_label))
+    }
+
     pub fn add_instruction(&mut self, instruction: &Instruction, sail: &Sail) -> crate::Result<()> {
         let encoder_name = encoder_fn_name(instruction);
         if self.encoder_names.insert(encoder_name.clone()) {
@@ -191,12 +317,15 @@ impl CodeGenerator {
     pub fn write_file(&self, output: &Path) -> crate::Result<()> {
         let mut f = File::create(output)?;
 
+        writeln!(f, "#![allow(clippy::identity_op)]")?;
+        writeln!(f, "#![allow(clippy::upper_case_acronyms)]")?;
         writeln!(f, "// Code generated automatically; DO NOT EDIT")?;
         writeln!(f, "use crate::helpers::*;")?;
         writeln!(f, "use crate::err;")?;
 
         f.write_all(self.emit_dispatcher_function().as_bytes())?;
         f.write_all(self.csr.rust()?.as_bytes())?;
+        f.write_all(self.declare_referenced_csrs().as_bytes())?;
         f.write_all(self.extensions.rust().as_bytes())?;
 
         for code in &self.enums {
@@ -219,7 +348,7 @@ impl CodeGenerator {
     }
 
     fn emit_instruction_parser(
-        &self,
+        &mut self,
         name: &str,
         instruction: &Instruction,
         sail: &Sail,
@@ -299,7 +428,10 @@ impl CodeGenerator {
                         );
                         needs_label = true;
                     }
-                    Builtin::SubVector { .. } => unreachable!(),
+                    Builtin::Imm5Plus1 { binding } => {
+                        w!(f, "let {binding} = parser.simm5_plus_1()?;");
+                    }
+                    Builtin::SubVector { .. } | Builtin::NamedCsr { .. } => unreachable!(),
                 },
                 Value::FunctionInvocation(FunctionInvocation { name, args }) => {
                     let sig = sail.mapping_signature(name)?;
@@ -401,6 +533,14 @@ impl CodeGenerator {
                     let bv = evaluate_bitvector_cast(value, typ)?;
                     w!(f, "{}", bitvector_constructor(&bv));
                 }
+                Value::Builtin(Builtin::NamedCsr { name }) => {
+                    if !self.csr.names.contains_key(name) {
+                        return err!("unknown CSR {name:?}");
+                    }
+                    w!(f, "{name}");
+
+                    self.referenced_csrs.insert(name.clone());
+                }
                 _ => return err!("unsupported {arg:?}"),
             }
         }
@@ -483,23 +623,46 @@ impl CodeGenerator {
         if instruction.binary.len() > 1 {
             let fragments = make_binary_matches(&rust_sig, &instruction.binary)?;
             if !fragments.is_empty() {
-                w!(f, "match {} {{", fragments[0]);
-                for (j, binary) in instruction.binary.iter().enumerate() {
-                    if let Some(cond) = &binary.cond {
-                        w!(f, "{} => {{", fragments[j + 1]);
-                        w!(f, "{}", Self::emit_condition(cond, &mut needs_ctx)?);
-                        w!(f, "Ok({})", Self::emit_binary_encoding(binary, sail)?);
-                        w!(f, "}},");
-                    } else {
+                let mut uniq = HashSet::<String>::new();
+                for frag in fragments[1..].iter() {
+                    uniq.insert(frag.clone());
+                }
+
+                let needs_if_ladder = uniq.len() < (fragments.len() - 1);
+                if needs_if_ladder {
+                    for (j, binary) in instruction.binary.iter().enumerate() {
+                        w!(f, "if matches!({}, {}) {{", fragments[0], fragments[j + 1]);
+                        if let Some(cond) = binary.cond.as_ref() {
+                            w!(f, "{}", Self::emit_condition(cond, &mut needs_ctx)?);
+                        }
                         w!(
                             f,
-                            "{} => Ok({}),",
-                            fragments[j + 1],
+                            "return Ok({});",
                             Self::emit_binary_encoding(binary, sail)?
                         );
+
+                        w!(f, "}}");
                     }
+                    w!(f, "err!(\"invalid encoding\")");
+                } else {
+                    w!(f, "match {} {{", fragments[0]);
+                    for (j, binary) in instruction.binary.iter().enumerate() {
+                        if let Some(cond) = binary.cond.as_ref() {
+                            w!(f, "{} => {{", fragments[j + 1]);
+                            w!(f, "{}", Self::emit_condition(cond, &mut needs_ctx)?);
+                            w!(f, "Ok({})", Self::emit_binary_encoding(binary, sail)?);
+                            w!(f, "}},");
+                        } else {
+                            w!(
+                                f,
+                                "{} => Ok({}),",
+                                fragments[j + 1],
+                                Self::emit_binary_encoding(binary, sail)?
+                            );
+                        }
+                    }
+                    w!(f, "}}");
                 }
-                w!(f, "}}");
             } else {
                 needs_ctx = true;
                 // Note: For almost all cases, the invocation of binary constructor
@@ -582,25 +745,70 @@ impl CodeGenerator {
     fn emit_condition(cond: &Value, needs_ctx: &mut bool) -> crate::Result<String> {
         let mut f = String::new();
 
-        let mut expr = vec![cond.clone()];
-        if let Ok(FunctionInvocation { name, args }) = &cond.as_fn_call() {
-            if name == "and_bool" {
-                expr = args.clone();
-            }
+        enum Mode {
+            BoolAnd,
+            BoolOr,
         }
 
-        for cond in expr {
-            if let Some(c) = resolve_arch_condition(&cond) {
-                w!(f, "if !({}) {{", c.rust_expr);
-                w!(f, "return err!(\"{}\");", c.error_msg);
-                w!(f, "}}");
+        let mut resolved = Vec::<Condition>::new();
+        let mut resolve_condition = |cond: &Value| {
+            if let Some(c) = resolve_arch_condition(cond) {
+                resolved.push(c);
                 *needs_ctx = true;
-            } else if let Some(c) = resolve_runtime_cond(&cond) {
-                w!(f, "if !({}) {{", c.rust_expr);
-                w!(f, "return err!(\"{}\");", c.error_msg);
-                w!(f, "}}");
+            } else if let Some(c) = resolve_runtime_cond(cond) {
+                resolved.push(c);
             } else {
                 warn!("unsupported condition {cond:?}");
+            }
+        };
+
+        let mut mode = Mode::BoolAnd;
+
+        if let Ok(FunctionInvocation { name, args }) = &cond.as_fn_call() {
+            if name == "and_bool" {
+                for arg in args.iter() {
+                    resolve_condition(arg);
+                }
+                mode = Mode::BoolAnd;
+            } else if name == "or_bool" {
+                for arg in args.iter() {
+                    resolve_condition(arg);
+                }
+                mode = Mode::BoolOr
+            } else {
+                resolve_condition(cond);
+            }
+        } else {
+            resolve_condition(cond);
+        }
+
+        if resolved.len() <= 1 {
+            mode = Mode::BoolAnd;
+        }
+
+        match mode {
+            Mode::BoolAnd => {
+                for cond in resolved {
+                    w!(f, "if !({}) {{", cond.rust_expr);
+                    w!(f, "return err!(\"{}\");", cond.error_msg);
+                    w!(f, "}}");
+                }
+            }
+            Mode::BoolOr => {
+                let rust_expr = resolved
+                    .iter()
+                    .map(|cond| cond.rust_expr.clone())
+                    .collect::<Vec<_>>()
+                    .join(" || ");
+                let error_msg = resolved
+                    .iter()
+                    .map(|cond| cond.error_msg.clone())
+                    .collect::<Vec<_>>()
+                    .join(" nor ");
+
+                w!(f, "if !({}) {{", rust_expr);
+                w!(f, "return err!(\"none conditions met: {}\");", error_msg);
+                w!(f, "}}");
             }
         }
 
@@ -709,6 +917,18 @@ impl CodeGenerator {
 
         f
     }
+
+    fn declare_referenced_csrs(&self) -> String {
+        let mut f = String::new();
+
+        for name in &self.referenced_csrs {
+            let code = self.csr.names.get(name).unwrap();
+            w!(f, "#[allow(non_upper_case_globals)]");
+            w!(f, "const {name}: csreg = csreg::new(0x{code:x});");
+        }
+
+        f
+    }
 }
 
 fn mk_rust_signature(
@@ -753,7 +973,7 @@ fn make_binary_matches(
     rust_sig: &[(RustSymbol, RustTypename)],
     constructors: &[BinaryConstructor],
 ) -> crate::Result<Vec<RustCode>> {
-    // 1. find out which arguments of functions are used to distinguish construtcor cases
+    // 1. find out which arguments of functions are used to distinguish constructor cases
     let n = rust_sig.len();
     let mut match_needed: Vec<bool> = vec![false; n];
     for binary in constructors {

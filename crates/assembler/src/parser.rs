@@ -7,6 +7,10 @@ pub struct Parser<'a> {
     string: &'a str,
 }
 
+pub struct ParserState {
+    consumed: usize,
+}
+
 impl<'a> Parser<'a> {
     pub fn new(s: &'a str) -> Self {
         Self {
@@ -17,6 +21,16 @@ impl<'a> Parser<'a> {
 
     pub const fn column(&self) -> usize {
         self.original.len() - self.string.len()
+    }
+
+    pub fn save(&self) -> ParserState {
+        ParserState {
+            consumed: self.original.len() - self.string.len(),
+        }
+    }
+
+    pub fn restore(&mut self, s: ParserState) {
+        self.string = &self.original[s.consumed..];
     }
 
     pub fn skip_ws(&mut self) {
@@ -51,7 +65,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_label(&mut self) -> Result<&str, String> {
+    pub fn expect_label(&mut self) -> crate::Result<&str> {
         let s = match self
             .string
             .char_indices()
@@ -78,7 +92,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_alpha_num(&mut self) -> Result<&str, String> {
+    pub fn expect_alpha_num(&mut self) -> crate::Result<&str> {
         let s = match self
             .string
             .char_indices()
@@ -126,18 +140,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_unsigned_immediate<const N: usize>(&mut self) -> Result<BitVector<N>, String> {
+    pub fn expect_unsigned_immediate<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
         let s = self.expect_alpha_num()?;
         let v = parse_u64(s)?;
         let max = (1_u64 << N) - 1;
         if v <= max {
             Ok(BitVector::<N>::new(v as u32))
         } else {
-            Err(format!("{} exceedes 2^{N})", v))
+            err!("{} exceedes 2^{N})", v)
         }
     }
 
-    pub fn expect_signed_immediate<const N: usize>(&mut self) -> Result<BitVector<N>, String> {
+    fn expect_i64(&mut self) -> crate::Result<(bool, u64)> {
         let (s, positive) = if let Some(suffix) = self.string.strip_prefix("+") {
             (suffix, true)
         } else if let Some(suffix) = self.string.strip_prefix("-") {
@@ -150,62 +164,137 @@ impl<'a> Parser<'a> {
         let s = self.expect_alpha_num()?;
         let v = parse_u64(s)?;
 
+        Ok((positive, v))
+    }
+
+    pub fn expect_signed_immediate<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
+        let (positive, magnitude) = self.expect_i64()?;
+
         if positive {
             let max = (1_u64 << (N - 1)) - 1;
-            if v <= max {
-                Ok(BitVector::<N>::new(v as u32))
+            if magnitude <= max {
+                Ok(BitVector::<N>::new(magnitude as u32))
             } else {
-                Err(format!("{} exceedes 2^{}-1)", v, N))
+                err!("{} exceedes 2^{}-1)", magnitude, N)
             }
         } else {
             let min = 1_u64 << (N - 1);
-            if v <= min {
-                let v = -(v as i64);
+            if magnitude <= min {
+                let v = -(magnitude as i64);
 
                 Ok(BitVector::<N>::new(v as u32))
             } else {
-                Err(format!("{} exceedes 2^{})", v, N))
+                err!("-{} exceedes -2^{})", magnitude, N)
             }
         }
     }
 
     pub fn optional_signed<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
-        todo!();
+        if self.string.starts_with(['+', '-']) {
+            return self.expect_signed_immediate::<N>();
+        }
+
+        let prev = self.string;
+        if let Ok(value) = self.expect_signed_immediate::<N>() {
+            Ok(value)
+        } else {
+            self.string = prev;
+
+            Ok(BitVector::<N>::zero())
+        }
     }
 
     pub fn optional_unsigned_nonzero<const N: usize>(&mut self) -> crate::Result<BitVector<N>> {
-        todo!();
-    }
-}
+        if self.string.starts_with(['+', '-']) {
+            return self.expect_unsigned_immediate::<N>();
+        }
 
-pub fn parse_u64(s: &str) -> Result<u64, String> {
-    if let Some(s) = s.strip_prefix("0x") {
-        if let Ok(v) = u64::from_str_radix(s, 16) {
-            return Ok(v);
+        let prev = self.string;
+        if let Ok(value) = self.expect_unsigned_immediate::<N>() {
+            Ok(value)
+        } else {
+            self.string = prev;
+
+            Ok(BitVector::<N>::zero())
         }
     }
 
-    if let Some(s) = s.strip_prefix("0b") {
-        if let Ok(v) = u64::from_str_radix(s, 2) {
-            return Ok(v);
+    pub fn simm5_plus_1(&mut self) -> crate::Result<BitVector<5>> {
+        let (positive, magnitude) = self.expect_i64()?;
+
+        if positive {
+            if magnitude > 16 {
+                return err!("{magnitude}: expected number in range -15..16");
+            }
+
+            let v = (magnitude as i64) + 16;
+
+            Ok(BitVector::<5>::new(v as u32))
+        } else {
+            if magnitude > 15 {
+                return err!("-{magnitude}: expected number in range -15..16");
+            }
+
+            let v = -(magnitude as i64) + 16;
+
+            Ok(BitVector::<5>::new(v as u32))
         }
     }
+}
 
-    if let Ok(v) = u64::from_str_radix(s, 10) {
-        return Ok(v);
+pub fn parse_u64(s: &str) -> crate::Result<u64> {
+    let initial = s;
+    let (s, radix) = determine_number_base(s);
+    match u64::from_str_radix(s, radix) {
+        Ok(v) => Ok(v),
+        Err(_) => err!("'{initial}': expected an usigned number"),
     }
-
-    Err("expected an unsigned number".to_string())
 }
 
-pub fn parse_i64(s: &str) -> Option<i64> {
-    None
+pub fn parse_i64(s: &str) -> crate::Result<i64> {
+    let initial = s;
+    let (positive, s) = if let Some(s) = s.strip_prefix('+') {
+        (true, s)
+    } else if let Some(s) = s.strip_prefix('-') {
+        (false, s)
+    } else {
+        (true, s)
+    };
+
+    let (s, radix) = determine_number_base(s);
+    match u64::from_str_radix(s, radix) {
+        Ok(v) => {
+            let pos_mag_max = i64::MAX as u64;
+            let neg_mag_max = pos_mag_max + 1;
+
+            if positive {
+                if v > pos_mag_max {
+                    err!("{initial}: overflow i64 range")
+                } else {
+                    Ok(v as i64)
+                }
+            } else {
+                if v > neg_mag_max {
+                    return err!("{initial}: overflow i64 range");
+                }
+
+                if v == neg_mag_max {
+                    Ok(i64::MIN)
+                } else {
+                    Ok(-(v as i64))
+                }
+            }
+        }
+        Err(_) => err!("'{initial}': expected a signed number"),
+    }
 }
 
-fn determine_number_base(s: &str) -> (&str, usize) {
+fn determine_number_base(s: &str) -> (&str, u32) {
     if let Some(s) = s.strip_prefix("0x") {
-        return (s, 16);
+        (s, 16)
+    } else if let Some(s) = s.strip_prefix("0b") {
+        (s, 2)
+    } else {
+        (s, 10)
     }
-
-    (s, 10)
 }

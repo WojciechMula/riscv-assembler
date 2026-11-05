@@ -42,10 +42,10 @@ pub type csreg = BitVector<12>;
 pub const zreg: regidx = regidx(0);
 
 #[allow(non_upper_case_globals)]
-pub const x1: regidx = regidx(1);
+pub const x0: regidx = regidx(0);
 
 #[allow(non_upper_case_globals)]
-pub const ra: regidx = regidx(0b01);
+pub const x1: regidx = regidx(1);
 
 #[allow(non_upper_case_globals)]
 pub const sp: regidx = regidx(0b10);

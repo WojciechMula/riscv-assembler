@@ -32,9 +32,8 @@ impl LabelResolverTrait for FirstPassLabelResolver {
                 if let Some(offset) = entry.offset {
                     if self.current_offset <= offset {
                         let diff = offset - self.current_offset;
-                        let diff = diff as i64;
 
-                        diff
+                        diff as i64
                     } else {
                         let diff = self.current_offset - offset;
                         let diff = diff as i64;

@@ -11,8 +11,9 @@ pub fn patch_assembly_definitions(mapping: &mut Mapping) {
 }
 
 pub fn replace_known_functions(mapping: &mut Mapping) {
-    for Pair { rhs, .. } in mapping.pairs.iter_mut() {
+    for Pair { lhs, rhs, .. } in mapping.pairs.iter_mut() {
         *rhs = rewrite(rhs, &replace_known_functions_aux);
+        *lhs = rewrite(lhs, &replace_known_functions_aux);
     }
 }
 
@@ -26,9 +27,17 @@ fn replace_known_functions_aux(v: &Value) -> Option<Value> {
         ("opt_spc", 0) => Some(Builtin::OptionalSpace),
         ("spc", 0) => Some(Builtin::Space),
         ("sp_reg_name", 0) => Some(Builtin::StackPointer),
-        ("csr_name_map", 1) => {
+        ("csr_name_map", 1) => match &fun.args[0] {
+            Value::Symbol(name) => Some(Builtin::CsrName {
+                binding: name.clone(),
+            }),
+            Value::String(name) => Some(Builtin::NamedCsr { name: name.clone() }),
+            _ => unreachable!(),
+        },
+        ("simm5_plus_1", 1) => {
             let binding = fun.args[0].as_symbol().unwrap().to_string();
-            Some(Builtin::CsrName { binding })
+
+            Some(Builtin::Imm5Plus1 { binding })
         }
         ("label", 2) => {
             let binding = fun.args[0].as_symbol().unwrap().to_string();

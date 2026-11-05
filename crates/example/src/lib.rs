@@ -20,6 +20,7 @@ macro_rules! err {
     };
 }
 
+#[allow(clippy::identity_op)]
 pub fn assemble_file(path: &Path, ctx: &Context) -> crate::Result<Vec<u16>> {
     let mut result = Vec::<u16>::new();
 
@@ -38,11 +39,8 @@ pub fn assemble_file(path: &Path, ctx: &Context) -> crate::Result<Vec<u16>> {
             continue;
         }
 
-        match line.split_once(['#', ';']) {
-            Some((body, _comment)) => {
-                line = body;
-            }
-            None => (),
+        if let Some((body, _comment)) = line.split_once(['#', ';']) {
+            line = body;
         }
 
         if let Some((label, rest)) = line.split_once(':') {
@@ -91,36 +89,35 @@ pub fn assemble_file(path: &Path, ctx: &Context) -> crate::Result<Vec<u16>> {
     // resolve labels
     let mut second_pass_resolver = SecondPassLabelResolver::new(&label_resolver)?;
     let show_header = true;
-    for (_, label_info) in &label_resolver.labels {
+    for label_info in label_resolver.labels.values() {
         if label_info.references.is_empty() {
             continue;
         }
 
-        assert!(label_info.offset.is_some());
+        assert!(label_info.offset.is_some(), "{label_info:?}: no offset set");
 
-        if label_info.offset.is_some() {
-            for r in &label_info.references {
-                match assemble(&r.asm_code, ctx, &mut second_pass_resolver) {
-                    Err(_) => unreachable!(), // the instruction has been already assembled, it must not fail
-                    Ok(instr) => {
-                        if show_header {
-                            println!();
-                            println!("patching branches");
-                        }
-                        println!("{:40} => {instr:04x}", r.asm_code);
+        for r in &label_info.references {
+            let Ok(instr) = assemble(&r.asm_code, ctx, &mut second_pass_resolver) else {
+                panic!(
+                    "{}: the instruction has been already assembled, it must not fail",
+                    r.asm_code
+                );
+            };
 
-                        // replace the instructions
-                        let index = (r.offset / 2) as usize;
-                        if is_uncompressed(instr) {
-                            result[index + 0] = (instr & 0xffff) as u16;
-                            result[index + 1] = (instr >> 16) as u16;
-                        } else {
-                            result[index + 0] = (instr & 0xffff) as u16;
-                        }
-                    }
-                }
+            if show_header {
+                println!();
+                println!("patching branches");
             }
-        } else {
+            println!("{:40} => {instr:04x}", r.asm_code);
+
+            // replace the instructions
+            let index = (r.offset / 2) as usize;
+            if is_uncompressed(instr) {
+                result[index + 0] = (instr & 0xffff) as u16;
+                result[index + 1] = (instr >> 16) as u16;
+            } else {
+                result[index + 0] = (instr & 0xffff) as u16;
+            }
         }
     }
 

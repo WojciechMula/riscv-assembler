@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     for argument in env::args().skip(1) {
         println!("assembling {}", argument);
         let path = Path::new(&argument);
-        let _ = assemble_file(&path, &ctx)?;
+        let _ = assemble_file(path, &ctx)?;
     }
 
     Ok(())

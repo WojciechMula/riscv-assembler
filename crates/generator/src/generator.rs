@@ -23,6 +23,7 @@ use crate::sail::patch::replace_known_functions;
 use log::debug;
 use log::error;
 use log::info;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -115,9 +116,22 @@ pub fn generate(input: &Path, pseudoinstr: &Path, output: &Path) -> crate::Resul
     info!("Generating Rust code");
     let mut cg = CodeGenerator::new(signatures, types, csr, extensions);
 
-    for instr in expanded.iter() {
-        debug!("Generating assembler code for {}", instr.mnemonic);
-        cg.add_instruction(instr, &sail)?;
+    let mut group_by_mnemonic = BTreeMap::<String, Vec<Instruction>>::new();
+    for instr in expanded {
+        if let Some(vec) = group_by_mnemonic.get_mut(&instr.mnemonic) {
+            vec.push(instr);
+        } else {
+            group_by_mnemonic.insert(instr.mnemonic.clone(), vec![instr]);
+        }
+    }
+
+    for (mnemonic, instructions) in group_by_mnemonic {
+        debug!("Generating assembler code for {}", mnemonic);
+        if instructions.len() == 1 {
+            cg.add_instruction(&instructions[0], &sail)?;
+        } else {
+            cg.add_instructions(&instructions, &sail)?;
+        }
     }
 
     info!("Saving to {}", output.display());

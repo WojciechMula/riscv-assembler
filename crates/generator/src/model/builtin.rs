@@ -27,6 +27,7 @@ pub enum Builtin {
         binding: String,
     },
 
+    /// Parse CSR name or number
     CsrName {
         binding: String,
     },
@@ -40,6 +41,16 @@ pub enum Builtin {
     Label {
         binding: String,
         bit_width: usize,
+    },
+
+    /// Represents a reference to CSR of given name
+    NamedCsr {
+        name: String,
+    },
+
+    /// 5-bit signed immediate encoded from -15..16 range (used only in pseudo-ops)
+    Imm5Plus1 {
+        binding: String,
     },
 }
 

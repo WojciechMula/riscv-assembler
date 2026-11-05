@@ -5,7 +5,7 @@ use crate::model::Value;
 use crate::model::rewrite;
 
 pub struct Condition {
-    /// A rust code fragment using `Context` fileds/methods
+    /// A rust code fragment using `Context` fields/methods
     pub rust_expr: String,
 
     /// An error message when the condition is not met

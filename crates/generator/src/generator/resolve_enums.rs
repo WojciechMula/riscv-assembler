@@ -114,8 +114,7 @@ pub fn resolve_string_enums(
             }
 
             let mut tmp = Vec::<(String, String)>::new();
-            let mut enum_typename = String::new();
-            {
+            let enum_typename = {
                 let Ok(mapping) = types.mapping(mapping_name, sail) else {
                     continue;
                 };
@@ -123,10 +122,9 @@ pub fn resolve_string_enums(
                     continue;
                 };
 
-                let Some(name) = mapping.signature.lhs.as_enum() else {
+                let Some(enum_typename) = mapping.signature.lhs.as_enum().cloned() else {
                     continue;
                 };
-                enum_typename = name.clone();
 
                 for Pair { lhs, rhs, .. } in &mapping.pairs {
                     let label = lhs.as_symbol()?;
@@ -134,7 +132,9 @@ pub fn resolve_string_enums(
 
                     tmp.push((label.to_string(), string.clone()));
                 }
-            }
+
+                enum_typename
+            };
 
             let Some(resolved) = types.enums.get_mut(&enum_typename) else {
                 return err!("unhandled `{enum_typename}`");
@@ -177,8 +177,7 @@ pub fn resolve_bitvector_enums(
                     }
 
                     let mut tmp = Vec::<(String, BitVector)>::new();
-                    let mut enum_typename = String::new();
-                    {
+                    let enum_typename = {
                         let Ok(mapping) = types.mapping(mapping_name, sail) else {
                             continue;
                         };
@@ -187,10 +186,9 @@ pub fn resolve_bitvector_enums(
                             continue;
                         };
 
-                        let Some(name) = mapping.signature.lhs.as_enum() else {
+                        let Some(enum_typename) = mapping.signature.lhs.as_enum().cloned() else {
                             continue;
                         };
-                        enum_typename = name.clone();
 
                         for Pair { lhs, rhs, .. } in &mapping.pairs {
                             let label = lhs.as_symbol()?;
@@ -198,7 +196,9 @@ pub fn resolve_bitvector_enums(
 
                             tmp.push((label.to_string(), bv.clone()));
                         }
-                    }
+
+                        enum_typename
+                    };
 
                     let Some(resolved) = types.enums.get_mut(&enum_typename) else {
                         return err!("unhandled `{enum_typename}`");

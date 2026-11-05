@@ -94,6 +94,10 @@ impl Value {
         matches!(self, Self::BinaryConcatenation(..))
     }
 
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String(_))
+    }
+
     pub fn typ(&self) -> &'static str {
         match self {
             Self::Unit => "unit",
